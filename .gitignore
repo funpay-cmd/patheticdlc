@@ -1,0 +1,19 @@
+# Build output
+build/
+out/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Loom run dirs
+run/
