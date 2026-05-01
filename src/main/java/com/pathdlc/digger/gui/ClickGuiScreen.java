@@ -29,6 +29,14 @@ public class ClickGuiScreen extends Screen {
    private ModuleSetting draggingSlider;
    private float draggingSliderX;
    private float draggingSliderW;
+   private int dogenSelectedCategory = 0;
+   private static final int DOGEN_PANEL_W = 520;
+   private static final int DOGEN_PANEL_H = 320;
+   private static final int DOGEN_SIDEBAR_W = 90;
+   private static final int DOGEN_HEADER_H = 30;
+   private static final int DOGEN_GAP = 6;
+   private static final int DOGEN_CAT_H = 30;
+   private static final int DOGEN_MODULE_H = 22;
 
    public ClickGuiScreen() {
       super(Text.literal("ClickGUI"));
@@ -344,6 +352,11 @@ public class ClickGuiScreen extends Screen {
          funtime.addModule(autoEvent);
          funtime.addModule(salary);
          this.categories.add(funtime);
+         Module menuStyle = new Module("MenuStyle");
+         menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen"}, 0));
+         Category settings = new Category("Settings", 0.0F, 0.0F);
+         settings.addModule(menuStyle);
+         this.categories.add(settings);
 
          for (Category cat : this.categories) {
             for (ModuleButton btn : cat.getModules()) {
@@ -351,6 +364,15 @@ public class ClickGuiScreen extends Screen {
             }
          }
       }
+   }
+
+   private boolean isDogenLayout() {
+      Module m = ModuleManager.get("MenuStyle");
+      if (m == null) {
+         return false;
+      }
+      ModuleSetting s = m.getSetting("Style");
+      return s != null && "Dogen".equals(s.getChoiceValue());
    }
 
    private int totalWidth() {
@@ -376,20 +398,229 @@ public class ClickGuiScreen extends Screen {
          int dimAlpha = (int)(this.openProgress * 102.0F);
          context.fill(0, 0, this.width, this.height, dimAlpha << 24);
          GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
-         int sx = this.startX();
-         int sy = this.startY();
-
-         for (int i = 0; i < this.categories.size(); i++) {
-            Category cat = this.categories.get(i);
-            int cx = sx + i * 136;
-            int colH = this.getColumnHeight(cat);
-            float slideOffset = (1.0F - this.openProgress) * (float)(30 + i * 12);
-            int cy = sy + (int)slideOffset;
-            float alpha = this.openProgress;
-            this.renderColumn(context, cat, cx, cy, colH, mouseX, mouseY, accent, alpha);
+         if (this.isDogenLayout()) {
+            this.renderDogenLayout(context, mouseX, mouseY, accent);
+         } else {
+            this.renderColonLayout(context, mouseX, mouseY, accent);
          }
 
          super.render(context, mouseX, mouseY, delta);
+      }
+   }
+
+   private void renderColonLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      int sx = this.startX();
+      int sy = this.startY();
+
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         int cx = sx + i * 136;
+         int colH = this.getColumnHeight(cat);
+         float slideOffset = (1.0F - this.openProgress) * (float)(30 + i * 12);
+         int cy = sy + (int)slideOffset;
+         float alpha = this.openProgress;
+         this.renderColumn(context, cat, cx, cy, colH, mouseX, mouseY, accent, alpha);
+      }
+   }
+
+   private int dogenStartX() {
+      return (this.width - DOGEN_PANEL_W) / 2;
+   }
+
+   private int dogenStartY() {
+      return (this.height - DOGEN_PANEL_H) / 2;
+   }
+
+   private int dogenSidebarX() {
+      return this.dogenStartX();
+   }
+
+   private int dogenContentX() {
+      return this.dogenStartX() + DOGEN_SIDEBAR_W + DOGEN_GAP;
+   }
+
+   private int dogenContentW() {
+      return DOGEN_PANEL_W - DOGEN_SIDEBAR_W - DOGEN_GAP;
+   }
+
+   private int dogenContentY() {
+      return this.dogenStartY() + DOGEN_HEADER_H + DOGEN_GAP;
+   }
+
+   private int dogenContentH() {
+      return DOGEN_PANEL_H - DOGEN_HEADER_H - DOGEN_GAP;
+   }
+
+   private void renderDogenLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      if (this.dogenSelectedCategory < 0 || this.dogenSelectedCategory >= this.categories.size()) {
+         this.dogenSelectedCategory = 0;
+      }
+
+      int sx = this.dogenStartX();
+      int sy = this.dogenStartY();
+      float alpha = this.openProgress;
+      float slideOffset = (1.0F - this.openProgress) * 30.0F;
+      int sidebarY = sy + (int)slideOffset;
+      int sidebarH = DOGEN_PANEL_H;
+      int sidebarX = sx;
+      if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
+         LiquidGlassRenderer.drawGlassPanel(context, (float)sidebarX, (float)sidebarY, (float)DOGEN_SIDEBAR_W, (float)sidebarH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
+      } else {
+         RoundedRectRenderer.draw(context, sidebarX, sidebarY, DOGEN_SIDEBAR_W, sidebarH, 8, -871230694);
+      }
+
+      int catH = Math.max(DOGEN_CAT_H, (sidebarH - 8) / Math.max(1, this.categories.size()));
+      int cy = sidebarY + 4;
+
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         boolean selected = i == this.dogenSelectedCategory;
+         boolean hovered = mouseX >= sidebarX + 4
+            && mouseX <= sidebarX + DOGEN_SIDEBAR_W - 4
+            && mouseY >= cy
+            && mouseY < cy + catH;
+         if (selected) {
+            RoundedRectRenderer.draw(context, sidebarX + 4, cy, DOGEN_SIDEBAR_W - 8, catH, 5, (int)(96.0F * alpha) << 24 | accent.textColor & 16777215);
+         } else if (hovered) {
+            int hAlpha = (int)(40.0F * alpha);
+            RoundedRectRenderer.draw(context, sidebarX + 4, cy, DOGEN_SIDEBAR_W - 8, catH, 5, hAlpha << 24 | 16777215);
+         }
+
+         int textColor = selected ? -1 : -3355444;
+         String label = cat.getName();
+         int textW = this.textRenderer.getWidth(this.styledText(label));
+         int tx = sidebarX + DOGEN_SIDEBAR_W / 2 - textW / 2;
+         int ty = cy + catH / 2 - this.textRenderer.fontHeight / 2;
+         this.drawStyledText(context, label, tx, ty, textColor);
+         cy += catH;
+      }
+
+      int hx = sx + DOGEN_SIDEBAR_W + DOGEN_GAP;
+      int hy = sy + (int)slideOffset;
+      int hw = this.dogenContentW();
+      if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
+         LiquidGlassRenderer.drawGlassPanel(context, (float)hx, (float)hy, (float)hw, (float)DOGEN_HEADER_H, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
+      } else {
+         RoundedRectRenderer.draw(context, hx, hy, hw, DOGEN_HEADER_H, 8, -871230694);
+      }
+
+      Category selectedCat = this.categories.get(this.dogenSelectedCategory);
+      String header = selectedCat.getName();
+      int headerY = hy + DOGEN_HEADER_H / 2 - this.textRenderer.fontHeight / 2;
+      this.drawStyledText(context, header, hx + 12, headerY, -1);
+      int countLabelW = this.textRenderer.getWidth(this.styledText(selectedCat.getModules().size() + " modules"));
+      this.drawStyledText(
+         context,
+         selectedCat.getModules().size() + " modules",
+         hx + hw - countLabelW - 12,
+         headerY,
+         accent.textColor
+      );
+      int mainX = hx;
+      int mainY = this.dogenContentY() + (int)slideOffset;
+      int mainW = hw;
+      int mainH = this.dogenContentH();
+      if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
+         LiquidGlassRenderer.drawGlassPanel(context, (float)mainX, (float)mainY, (float)mainW, (float)mainH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
+      } else {
+         RoundedRectRenderer.draw(context, mainX, mainY, mainW, mainH, 8, -871230694);
+      }
+
+      int scroll = this.scrollOffsets.getOrDefault("dogen:" + selectedCat.getName(), 0);
+      context.enableScissor(mainX + 2, mainY + 2, mainX + mainW - 2, mainY + mainH - 2);
+      int rowY = mainY + 8 - scroll;
+
+      for (ModuleButton btn : selectedCat.getModules()) {
+         Module mod = btn.getModule();
+         int rowH = DOGEN_MODULE_H;
+         boolean hovered = mouseX >= mainX + 6
+            && mouseX <= mainX + mainW - 6
+            && mouseY >= rowY
+            && mouseY < rowY + rowH
+            && mouseY >= mainY + 2
+            && mouseY < mainY + mainH - 2;
+         btn.updateHover(hovered);
+         if (mod.isEnabled()) {
+            RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, (int)(78.0F * alpha) << 24 | accent.textColor & 16777215);
+         } else if (btn.hoverAmount > 0.01F) {
+            int hAlpha = (int)(btn.hoverAmount * 36.0F * alpha);
+            RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, hAlpha << 24 | 16777215);
+         }
+
+         int nameColor = mod.isEnabled() ? -1 : -3355444;
+         int nameY = rowY + rowH / 2 - this.textRenderer.fontHeight / 2;
+         this.drawStyledText(context, mod.getName(), mainX + 16, nameY, nameColor);
+         int sw = 22;
+         int sh = 12;
+         int tx = mainX + mainW - 12 - sw;
+         int ty = rowY + rowH / 2 - sh / 2;
+         int bgColor = mod.isEnabled() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
+         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
+         int knobD = sh - 2;
+         int knobX = mod.isEnabled() ? tx + sw - knobD - 1 : tx + 1;
+         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+         if (mod.hasSettings()) {
+            String arrow = mod.isSettingsExpanded() ? "v" : ">";
+            int arrowColor = mod.isSettingsExpanded() ? accent.textColor : -8947849;
+            this.drawStyledText(context, arrow, tx - 14, nameY, arrowColor);
+         }
+
+         rowY += rowH;
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            for (ModuleSetting setting : mod.getSettings()) {
+               this.renderDogenSetting(context, setting, mainX, rowY, mainW, mouseX, mouseY, accent, alpha);
+               rowY += 16;
+            }
+
+            rowY += 4;
+         }
+      }
+
+      context.disableScissor();
+   }
+
+   private void renderDogenSetting(
+      DrawContext context, ModuleSetting setting, int mainX, int y, int mainW, int mouseX, int mouseY, GuiSettings.AccentColor accent, float alpha
+   ) {
+      int left = mainX + 24;
+      int right = mainX + mainW - 16;
+      int w = right - left;
+      RoundedRectRenderer.draw(context, left - 2, y, w + 4, 16, 3, (int)(28.0F * alpha) << 24);
+      if (setting.getType() == ModuleSetting.Type.SLIDER) {
+         this.drawStyledText(context, setting.getName(), left + 2, y + 1, -8947849);
+         float sliderX = (float)(left + 2);
+         float sliderW = (float)(w - 4);
+         float sliderY = (float)(y + 16 - 5);
+         float norm = setting.getNormalized();
+         RoundedRectRenderer.draw(context, (int)sliderX, (int)sliderY, (int)sliderW, 3, 2, 872415231);
+         int fillW = (int)(sliderW * norm);
+         if (fillW > 0) {
+            RoundedRectRenderer.draw(context, (int)sliderX, (int)sliderY, fillW, 3, 2, accent.textColor);
+         }
+
+         int knobCx = (int)(sliderX + sliderW * norm);
+         RoundedRectRenderer.draw(context, knobCx - 3, (int)sliderY - 2, 6, 7, 3, -1);
+         String val = setting.getDisplayValue();
+         int valW = this.textRenderer.getWidth(this.styledText(val));
+         this.drawStyledText(context, val, right - valW - 1, y + 1, -4473925);
+      } else if (setting.getType() == ModuleSetting.Type.TOGGLE) {
+         this.drawStyledText(context, setting.getName(), left + 2, y + 4, -8947849);
+         int sw = 16;
+         int sh = 8;
+         int tx = right - sw - 2;
+         int ty = y + 8 - sh / 2;
+         int bgColor = setting.getBool() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
+         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
+         int knobD = sh - 2;
+         int knobX = setting.getBool() ? tx + sw - knobD - 1 : tx + 1;
+         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+      } else if (setting.getType() == ModuleSetting.Type.CHOICE) {
+         this.drawStyledText(context, setting.getName(), left + 2, y + 4, -8947849);
+         String val = setting.getChoiceValue();
+         int valW = this.textRenderer.getWidth(this.styledText(val));
+         int valX = right - valW - 4;
+         RoundedRectRenderer.draw(context, valX - 3, y + 2, valW + 6, 12, 3, 587202559);
+         this.drawStyledText(context, val, valX, y + 4, -3355444);
       }
    }
 
@@ -528,6 +759,10 @@ public class ClickGuiScreen extends Screen {
    }
 
    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+      if (this.isDogenLayout()) {
+         return this.mouseClickedDogen(mouseX, mouseY, button);
+      }
+
       int sx = this.startX();
       int sy = this.startY();
 
@@ -621,7 +856,109 @@ public class ClickGuiScreen extends Screen {
       }
    }
 
+   private boolean mouseClickedDogen(double mouseX, double mouseY, int button) {
+      int sx = this.dogenStartX();
+      int sy = this.dogenStartY();
+      int sidebarX = sx;
+      int sidebarY = sy;
+      int sidebarH = DOGEN_PANEL_H;
+      int catH = Math.max(DOGEN_CAT_H, (sidebarH - 8) / Math.max(1, this.categories.size()));
+      int cy = sidebarY + 4;
+      if (mouseX >= (double)(sidebarX + 4) && mouseX <= (double)(sidebarX + DOGEN_SIDEBAR_W - 4)) {
+         for (int i = 0; i < this.categories.size(); i++) {
+            if (mouseY >= (double)cy && mouseY < (double)(cy + catH)) {
+               this.dogenSelectedCategory = i;
+               return true;
+            }
+
+            cy += catH;
+         }
+      }
+
+      int mainX = sx + DOGEN_SIDEBAR_W + DOGEN_GAP;
+      int mainY = this.dogenContentY();
+      int mainW = this.dogenContentW();
+      int mainH = this.dogenContentH();
+      if (this.dogenSelectedCategory < 0 || this.dogenSelectedCategory >= this.categories.size()) {
+         return super.mouseClicked(mouseX, mouseY, button);
+      } else {
+         Category selectedCat = this.categories.get(this.dogenSelectedCategory);
+         int scroll = this.scrollOffsets.getOrDefault("dogen:" + selectedCat.getName(), 0);
+         int rowY = mainY + 8 - scroll;
+         if (!(mouseX < (double)(mainX + 6)) && !(mouseX > (double)(mainX + mainW - 6))) {
+            if (mouseY >= (double)(mainY + 2) && mouseY < (double)(mainY + mainH - 2)) {
+               for (ModuleButton btn : selectedCat.getModules()) {
+                  Module mod = btn.getModule();
+                  int rowH = DOGEN_MODULE_H;
+                  if (mouseY >= (double)rowY && mouseY < (double)(rowY + rowH)) {
+                     int sw = 22;
+                     int tx = mainX + mainW - 12 - sw;
+                     boolean clickedToggle = mouseX >= (double)tx && mouseX <= (double)(tx + sw);
+                     if (button == 0) {
+                        if (clickedToggle) {
+                           mod.toggle();
+                        } else if (mod.hasSettings()) {
+                           mod.toggleSettingsExpanded();
+                        } else {
+                           mod.toggle();
+                        }
+                     } else if (button == 1 && mod.hasSettings()) {
+                        mod.toggleSettingsExpanded();
+                     }
+
+                     return true;
+                  }
+
+                  rowY += rowH;
+                  if (mod.isSettingsExpanded() && mod.hasSettings()) {
+                     for (ModuleSetting setting : mod.getSettings()) {
+                        if (mouseY >= (double)rowY && mouseY < (double)(rowY + 16)) {
+                           this.handleDogenSettingClick(setting, mainX, mainW, rowY, mouseX);
+                           return true;
+                        }
+
+                        rowY += 16;
+                     }
+
+                     rowY += 4;
+                  }
+               }
+
+               return true;
+            }
+
+            return super.mouseClicked(mouseX, mouseY, button);
+         } else {
+            return super.mouseClicked(mouseX, mouseY, button);
+         }
+      }
+   }
+
+   private void handleDogenSettingClick(ModuleSetting setting, int mainX, int mainW, int y, double mouseX) {
+      int left = mainX + 24;
+      int right = mainX + mainW - 16;
+      if (setting.getType() == ModuleSetting.Type.TOGGLE) {
+         setting.toggleBool();
+      } else if (setting.getType() == ModuleSetting.Type.CHOICE) {
+         setting.cycleChoice();
+      } else if (setting.getType() == ModuleSetting.Type.SLIDER) {
+         int w = right - left;
+         float sliderX = (float)(left + 2);
+         float sliderW = (float)(w - 4);
+         float norm = (float)((mouseX - (double)sliderX) / (double)sliderW);
+         norm = Math.max(0.0F, Math.min(1.0F, norm));
+         setting.setFromNormalized(norm);
+         this.draggingSlider = setting;
+         this.draggingSliderX = sliderX;
+         this.draggingSliderW = sliderW;
+      }
+   }
+
    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      if (this.isDogenLayout()) {
+         return this.mouseScrolledDogen(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+
       int sx = this.startX();
       int sy = this.startY();
 
@@ -644,6 +981,41 @@ public class ClickGuiScreen extends Screen {
       }
 
       return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+   }
+
+   private boolean mouseScrolledDogen(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      int sx = this.dogenStartX();
+      int mainX = sx + DOGEN_SIDEBAR_W + DOGEN_GAP;
+      int mainY = this.dogenContentY();
+      int mainW = this.dogenContentW();
+      int mainH = this.dogenContentH();
+      if (mouseX >= (double)mainX
+         && mouseX <= (double)(mainX + mainW)
+         && mouseY >= (double)mainY
+         && mouseY <= (double)(mainY + mainH)
+         && this.dogenSelectedCategory >= 0
+         && this.dogenSelectedCategory < this.categories.size()) {
+         Category cat = this.categories.get(this.dogenSelectedCategory);
+         String key = "dogen:" + cat.getName();
+         int scroll = this.scrollOffsets.getOrDefault(key, 0);
+         scroll -= (int)(verticalAmount * 10.0);
+         int totalH = 8;
+
+         for (ModuleButton btn : cat.getModules()) {
+            totalH += DOGEN_MODULE_H;
+            Module mod = btn.getModule();
+            if (mod.isSettingsExpanded() && mod.hasSettings()) {
+               totalH += mod.getSettings().size() * 16 + 4;
+            }
+         }
+
+         int maxScroll = Math.max(0, totalH - mainH);
+         scroll = Math.max(0, Math.min(maxScroll, scroll));
+         this.scrollOffsets.put(key, scroll);
+         return true;
+      } else {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
    }
 
    public boolean shouldPause() {
