@@ -116,7 +116,6 @@ public class PathDlcDiggerClient implements ClientModInitializer {
                AUTO_CRAFT.tick(client);
                AUTO_SELL.tick(client);
                AUTO_BUY.tick(client);
-               PerformanceSettings.onFrameEnd();
             }
          );
       WorldRenderEvents.AFTER_ENTITIES.register((AfterEntities)context -> {
@@ -133,6 +132,8 @@ public class PathDlcDiggerClient implements ClientModInitializer {
          if (HitEffectsRenderer.hasActiveEffects()) {
             HitEffectsRenderer.renderHud(context);
          }
+
+         PerformanceSettings.onFrameEnd();
       });
       Chat.later("PathDLC loaded. Commands: .pos, .fill, .dig baritone, .apple, .clan, .warden");
    }
