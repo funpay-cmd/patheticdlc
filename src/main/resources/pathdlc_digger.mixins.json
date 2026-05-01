@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "package": "com.pathdlc.digger.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "FogMixin",
+    "HitEffectsMixin",
+    "AspectRatioMixin",
+    "TitleScreenMixin",
+    "MotionBlurMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "refmap": "pathdlc-baritone-digger-refmap.json"
+}
