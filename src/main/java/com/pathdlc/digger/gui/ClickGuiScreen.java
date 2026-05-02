@@ -28,10 +28,13 @@ public class ClickGuiScreen extends Screen {
    private float openProgress = 0.0F;
    private final Map<String, Integer> scrollOffsets = new HashMap<>();
    private final Map<String, Float> colDragY = new HashMap<>();
+   private final Map<String, Boolean> compactExpanded = new HashMap<>();
    private ModuleSetting draggingSlider;
    private float draggingSliderX;
    private float draggingSliderW;
    private int dogenSelectedCategory = 0;
+   private int tabsSelectedCategory = 0;
+   private int cardsOpenCategory = -1;
    private static final int DOGEN_PANEL_W = 520;
    private static final int DOGEN_PANEL_H = 320;
    private static final int DOGEN_SIDEBAR_W = 90;
@@ -39,6 +42,29 @@ public class ClickGuiScreen extends Screen {
    private static final int DOGEN_GAP = 6;
    private static final int DOGEN_CAT_H = 30;
    private static final int DOGEN_MODULE_H = 22;
+   private static final int TABS_PANEL_W = 540;
+   private static final int TABS_PANEL_H = 320;
+   private static final int TABS_BAR_H = 36;
+   private static final int TABS_GAP = 6;
+   private static final int TABS_MODULE_H = 22;
+   private static final int COMPACT_PANEL_W = 200;
+   private static final int COMPACT_HEADER_H = 30;
+   private static final int COMPACT_CAT_H = 22;
+   private static final int COMPACT_MODULE_H = 18;
+   private static final int CARDS_W = 160;
+   private static final int CARDS_H = 90;
+   private static final int CARDS_GAP = 10;
+   private static final int CARDS_COLS = 3;
+   private static final int CARDS_OVERLAY_W = 340;
+   private static final int CARDS_OVERLAY_H = 300;
+
+   private enum Style {
+      COLON,
+      DOGEN,
+      TABS,
+      COMPACT,
+      CARDS
+   }
 
    public ClickGuiScreen() {
       super(Text.literal("ClickGUI"));
@@ -355,7 +381,7 @@ public class ClickGuiScreen extends Screen {
          funtime.addModule(salary);
          this.categories.add(funtime);
          Module menuStyle = new Module("MenuStyle");
-         menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen"}, 0));
+         menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen", "Tabs", "Compact", "Cards"}, 0));
          Category settings = new Category("Settings", 0.0F, 0.0F);
          settings.addModule(menuStyle);
          this.categories.add(settings);
@@ -369,12 +395,34 @@ public class ClickGuiScreen extends Screen {
    }
 
    private boolean isDogenLayout() {
+      return this.getStyle() == Style.DOGEN;
+   }
+
+   private Style getStyle() {
       Module m = ModuleManager.get("MenuStyle");
       if (m == null) {
-         return false;
+         return Style.COLON;
       }
       ModuleSetting s = m.getSetting("Style");
-      return s != null && "Dogen".equals(s.getChoiceValue());
+      if (s == null) {
+         return Style.COLON;
+      }
+      String v = s.getChoiceValue();
+      if (v == null) {
+         return Style.COLON;
+      }
+      switch (v) {
+         case "Dogen":
+            return Style.DOGEN;
+         case "Tabs":
+            return Style.TABS;
+         case "Compact":
+            return Style.COMPACT;
+         case "Cards":
+            return Style.CARDS;
+         default:
+            return Style.COLON;
+      }
    }
 
    private int totalWidth() {
@@ -400,11 +448,23 @@ public class ClickGuiScreen extends Screen {
          int dimAlpha = (int)(this.openProgress * 102.0F);
          context.fill(0, 0, this.width, this.height, dimAlpha << 24);
          GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
-         if (this.isDogenLayout()) {
-            this.renderDogenLayout(context, mouseX, mouseY, accent);
-         } else {
-            this.renderColonLayout(context, mouseX, mouseY, accent);
-            this.renderColonBrand(context, accent);
+         switch (this.getStyle()) {
+            case DOGEN:
+               this.renderDogenLayout(context, mouseX, mouseY, accent);
+               break;
+            case TABS:
+               this.renderTabsLayout(context, mouseX, mouseY, accent);
+               break;
+            case COMPACT:
+               this.renderCompactLayout(context, mouseX, mouseY, accent);
+               break;
+            case CARDS:
+               this.renderCardsLayout(context, mouseX, mouseY, accent);
+               break;
+            default:
+               this.renderColonLayout(context, mouseX, mouseY, accent);
+               this.renderColonBrand(context, accent);
+               break;
          }
 
          super.render(context, mouseX, mouseY, delta);
@@ -816,8 +876,18 @@ public class ClickGuiScreen extends Screen {
    }
 
    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-      if (this.isDogenLayout()) {
-         return this.mouseClickedDogen(mouseX, mouseY, button);
+      Style style = this.getStyle();
+      switch (style) {
+         case DOGEN:
+            return this.mouseClickedDogen(mouseX, mouseY, button);
+         case TABS:
+            return this.mouseClickedTabs(mouseX, mouseY, button);
+         case COMPACT:
+            return this.mouseClickedCompact(mouseX, mouseY, button);
+         case CARDS:
+            return this.mouseClickedCards(mouseX, mouseY, button);
+         default:
+            break;
       }
 
       int sx = this.startX();
@@ -1012,8 +1082,18 @@ public class ClickGuiScreen extends Screen {
    }
 
    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-      if (this.isDogenLayout()) {
-         return this.mouseScrolledDogen(mouseX, mouseY, horizontalAmount, verticalAmount);
+      Style style = this.getStyle();
+      switch (style) {
+         case DOGEN:
+            return this.mouseScrolledDogen(mouseX, mouseY, horizontalAmount, verticalAmount);
+         case TABS:
+            return this.mouseScrolledTabs(mouseX, mouseY, horizontalAmount, verticalAmount);
+         case COMPACT:
+            return this.mouseScrolledCompact(mouseX, mouseY, horizontalAmount, verticalAmount);
+         case CARDS:
+            return this.mouseScrolledCards(mouseX, mouseY, horizontalAmount, verticalAmount);
+         default:
+            break;
       }
 
       int sx = this.startX();
@@ -1073,6 +1153,650 @@ public class ClickGuiScreen extends Screen {
       } else {
          return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
       }
+   }
+
+   private void drawPanelBg(DrawContext context, int x, int y, int w, int h, GuiSettings.AccentColor accent) {
+      if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
+         LiquidGlassRenderer.drawGlassPanel(context, (float)x, (float)y, (float)w, (float)h, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
+      } else {
+         RoundedRectRenderer.draw(context, x, y, w, h, 8, -871230694);
+      }
+   }
+
+   private void drawBrandRow(DrawContext context, int x, int y, int h, GuiSettings.AccentColor accent) {
+      int logoSize = Math.min(20, h - 8);
+      int logoY = y + h / 2 - logoSize / 2;
+      context.drawTexture(
+         RenderLayer::getGuiTextured,
+         LOGO,
+         x + 8,
+         logoY,
+         0.0F,
+         0.0F,
+         logoSize,
+         logoSize,
+         logoSize,
+         logoSize
+      );
+      int textY = y + h / 2 - this.textRenderer.fontHeight / 2;
+      this.drawStyledText(context, "WareVisuals", x + 8 + logoSize + 6, textY, accent.textColor);
+   }
+
+   private int brandRowWidth(int logoSize) {
+      int textW = this.textRenderer.getWidth(this.styledText("WareVisuals"));
+      return 8 + logoSize + 6 + textW + 8;
+   }
+
+   private int tabsStartX() {
+      return (this.width - TABS_PANEL_W) / 2;
+   }
+
+   private int tabsStartY() {
+      return (this.height - TABS_PANEL_H) / 2;
+   }
+
+   private int tabsContentY() {
+      return this.tabsStartY() + TABS_BAR_H + TABS_GAP;
+   }
+
+   private int tabsContentH() {
+      return TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+   }
+
+   private void renderTabsLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      if (this.tabsSelectedCategory < 0 || this.tabsSelectedCategory >= this.categories.size()) {
+         this.tabsSelectedCategory = 0;
+      }
+      float alpha = this.openProgress;
+      float slideOffset = (1.0F - alpha) * 24.0F;
+      int sx = this.tabsStartX();
+      int sy = this.tabsStartY() + (int)slideOffset;
+
+      this.drawPanelBg(context, sx, sy, TABS_PANEL_W, TABS_BAR_H, accent);
+      this.drawBrandRow(context, sx, sy, TABS_BAR_H, accent);
+      int brandW = this.brandRowWidth(20);
+      int sepX = sx + brandW;
+      context.fill(sepX, sy + 8, sepX + 1, sy + TABS_BAR_H - 8, 0x40FFFFFF);
+
+      int tabsX = sepX + 8;
+      int tabsRight = sx + TABS_PANEL_W - 8;
+      int availW = tabsRight - tabsX;
+      int gap = 4;
+      int tabH = TABS_BAR_H - 12;
+      int totalTextW = 0;
+      for (Category cat : this.categories) {
+         totalTextW += this.textRenderer.getWidth(this.styledText(cat.getName())) + 16;
+      }
+      totalTextW += gap * (this.categories.size() - 1);
+      int extra = Math.max(0, (availW - totalTextW) / Math.max(1, this.categories.size()));
+      int tx = tabsX;
+      int ty = sy + 6;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         int tw = this.textRenderer.getWidth(this.styledText(cat.getName())) + 16 + extra;
+         boolean selected = i == this.tabsSelectedCategory;
+         boolean hovered = mouseX >= tx && mouseX <= tx + tw && mouseY >= ty && mouseY < ty + tabH;
+         if (selected) {
+            RoundedRectRenderer.draw(context, tx, ty, tw, tabH, 5, (int)(110.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
+         } else if (hovered) {
+            int hAlpha = (int)(40.0F * alpha);
+            RoundedRectRenderer.draw(context, tx, ty, tw, tabH, 5, hAlpha << 24 | 0xFFFFFF);
+         }
+         int textColor = selected ? -1 : -3355444;
+         int labelW = this.textRenderer.getWidth(this.styledText(cat.getName()));
+         this.drawStyledText(context, cat.getName(), tx + tw / 2 - labelW / 2, ty + tabH / 2 - this.textRenderer.fontHeight / 2, textColor);
+         if (selected) {
+            RoundedRectRenderer.draw(context, tx + 6, ty + tabH - 2, tw - 12, 2, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
+         }
+         tx += tw + gap;
+      }
+
+      int contentX = sx;
+      int contentY = sy + TABS_BAR_H + TABS_GAP;
+      int contentW = TABS_PANEL_W;
+      int contentH = TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+      this.drawPanelBg(context, contentX, contentY, contentW, contentH, accent);
+
+      Category selectedCat = this.categories.get(this.tabsSelectedCategory);
+      String key = "tabs:" + selectedCat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      context.enableScissor(contentX + 2, contentY + 2, contentX + contentW - 2, contentY + contentH - 2);
+      int rowY = contentY + 8 - scroll;
+      for (ModuleButton btn : selectedCat.getModules()) {
+         Module mod = btn.getModule();
+         int rowH = TABS_MODULE_H;
+         boolean hovered = mouseX >= contentX + 8 && mouseX <= contentX + contentW - 8
+            && mouseY >= rowY && mouseY < rowY + rowH
+            && mouseY >= contentY + 2 && mouseY < contentY + contentH - 2;
+         btn.updateHover(hovered);
+         if (mod.isEnabled()) {
+            RoundedRectRenderer.draw(context, contentX + 8, rowY, contentW - 16, rowH, 5, (int)(78.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
+         } else if (btn.hoverAmount > 0.01F) {
+            int hAlpha = (int)(btn.hoverAmount * 36.0F * alpha);
+            RoundedRectRenderer.draw(context, contentX + 8, rowY, contentW - 16, rowH, 5, hAlpha << 24 | 0xFFFFFF);
+         }
+         int nameColor = mod.isEnabled() ? -1 : -3355444;
+         this.drawStyledText(context, mod.getName(), contentX + 16, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
+         int sw = 22;
+         int sh = 12;
+         int toggleX = contentX + contentW - 16 - sw;
+         int toggleY = rowY + rowH / 2 - sh / 2;
+         int bgColor = mod.isEnabled() ? 0xC0000000 | (accent.textColor & 0xFFFFFF) : 0x80444444;
+         RoundedRectRenderer.draw(context, toggleX, toggleY, sw, sh, sh / 2, bgColor);
+         int knobD = sh - 2;
+         int knobX = mod.isEnabled() ? toggleX + sw - knobD - 1 : toggleX + 1;
+         RoundedRectRenderer.draw(context, knobX, toggleY + 1, knobD, knobD, knobD / 2, -1);
+         if (mod.hasSettings()) {
+            String arrow = mod.isSettingsExpanded() ? "v" : ">";
+            this.drawStyledText(context, arrow, toggleX - 14, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
+         }
+         rowY += rowH;
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            for (ModuleSetting setting : mod.getSettings()) {
+               this.renderSetting(context, setting, contentX + 4, rowY, mouseX, mouseY, accent, alpha, contentY + 2, contentH - 4);
+               rowY += 16;
+            }
+            rowY += 4;
+         }
+      }
+      context.disableScissor();
+   }
+
+   private boolean mouseClickedTabs(double mouseX, double mouseY, int button) {
+      int sx = this.tabsStartX();
+      int sy = this.tabsStartY();
+      int brandW = this.brandRowWidth(20);
+      int tabsX = sx + brandW + 8;
+      int tabsRight = sx + TABS_PANEL_W - 8;
+      int availW = tabsRight - tabsX;
+      int gap = 4;
+      int tabH = TABS_BAR_H - 12;
+      int totalTextW = 0;
+      for (Category cat : this.categories) {
+         totalTextW += this.textRenderer.getWidth(this.styledText(cat.getName())) + 16;
+      }
+      totalTextW += gap * (this.categories.size() - 1);
+      int extra = Math.max(0, (availW - totalTextW) / Math.max(1, this.categories.size()));
+      int tx = tabsX;
+      int ty = sy + 6;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         int tw = this.textRenderer.getWidth(this.styledText(cat.getName())) + 16 + extra;
+         if (mouseX >= tx && mouseX <= tx + tw && mouseY >= ty && mouseY < ty + tabH) {
+            this.tabsSelectedCategory = i;
+            return true;
+         }
+         tx += tw + gap;
+      }
+      if (this.tabsSelectedCategory < 0 || this.tabsSelectedCategory >= this.categories.size()) {
+         return super.mouseClicked(mouseX, mouseY, button);
+      }
+      Category selectedCat = this.categories.get(this.tabsSelectedCategory);
+      int contentX = sx;
+      int contentY = sy + TABS_BAR_H + TABS_GAP;
+      int contentW = TABS_PANEL_W;
+      int contentH = TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+      if (mouseX < contentX + 8 || mouseX > contentX + contentW - 8 || mouseY < contentY + 2 || mouseY > contentY + contentH - 2) {
+         return super.mouseClicked(mouseX, mouseY, button);
+      }
+      String key = "tabs:" + selectedCat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      int rowY = contentY + 8 - scroll;
+      for (ModuleButton btn : selectedCat.getModules()) {
+         Module mod = btn.getModule();
+         int rowH = TABS_MODULE_H;
+         if (mouseY >= rowY && mouseY < rowY + rowH) {
+            int sw = 22;
+            int toggleX = contentX + contentW - 16 - sw;
+            boolean clickedToggle = mouseX >= toggleX && mouseX <= toggleX + sw;
+            if (button == 0) {
+               if (clickedToggle) {
+                  mod.toggle();
+               } else if (mod.hasSettings()) {
+                  mod.toggleSettingsExpanded();
+               } else {
+                  mod.toggle();
+               }
+            } else if (button == 1 && mod.hasSettings()) {
+               mod.toggleSettingsExpanded();
+            }
+            return true;
+         }
+         rowY += rowH;
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            for (ModuleSetting setting : mod.getSettings()) {
+               if (mouseY >= rowY && mouseY < rowY + 16) {
+                  this.handleDogenSettingClick(setting, contentX + 4, contentW - 8, rowY, mouseX);
+                  return true;
+               }
+               rowY += 16;
+            }
+            rowY += 4;
+         }
+      }
+      return true;
+   }
+
+   private boolean mouseScrolledTabs(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      int sx = this.tabsStartX();
+      int sy = this.tabsStartY();
+      int contentX = sx;
+      int contentY = sy + TABS_BAR_H + TABS_GAP;
+      int contentW = TABS_PANEL_W;
+      int contentH = TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+      if (mouseX < contentX || mouseX > contentX + contentW || mouseY < contentY || mouseY > contentY + contentH
+         || this.tabsSelectedCategory < 0 || this.tabsSelectedCategory >= this.categories.size()) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      Category cat = this.categories.get(this.tabsSelectedCategory);
+      String key = "tabs:" + cat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      scroll -= (int)(verticalAmount * 10.0);
+      int totalH = 8;
+      for (ModuleButton btn : cat.getModules()) {
+         totalH += TABS_MODULE_H;
+         Module mod = btn.getModule();
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            totalH += mod.getSettings().size() * 16 + 4;
+         }
+      }
+      int maxScroll = Math.max(0, totalH - contentH);
+      scroll = Math.max(0, Math.min(maxScroll, scroll));
+      this.scrollOffsets.put(key, scroll);
+      return true;
+   }
+
+   private int compactStartX() {
+      return 16;
+   }
+
+   private int compactStartY() {
+      return 20;
+   }
+
+   private int compactPanelH() {
+      return Math.min(this.height - 40, 24 + COMPACT_HEADER_H + this.compactTotalContentH() + 8);
+   }
+
+   private int compactTotalContentH() {
+      int total = 0;
+      for (Category cat : this.categories) {
+         total += COMPACT_CAT_H;
+         if (Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()))) {
+            for (ModuleButton btn : cat.getModules()) {
+               total += COMPACT_MODULE_H;
+               Module mod = btn.getModule();
+               if (mod.isSettingsExpanded() && mod.hasSettings()) {
+                  total += mod.getSettings().size() * 16 + 4;
+               }
+            }
+         }
+      }
+      return total;
+   }
+
+   private void renderCompactLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      float alpha = this.openProgress;
+      int slide = (int)((1.0F - alpha) * -30.0F);
+      int sx = this.compactStartX() + slide;
+      int sy = this.compactStartY();
+      int w = COMPACT_PANEL_W;
+      int h = this.compactPanelH();
+      this.drawPanelBg(context, sx, sy, w, h, accent);
+
+      RoundedRectRenderer.draw(context, sx, sy, 2, h, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
+      this.drawBrandRow(context, sx, sy, COMPACT_HEADER_H, accent);
+      RoundedRectRenderer.draw(context, sx + 6, sy + COMPACT_HEADER_H, w - 12, 1, 0, 0x30FFFFFF);
+
+      int contentTop = sy + COMPACT_HEADER_H + 4;
+      int contentBottom = sy + h - 4;
+      context.enableScissor(sx + 2, contentTop, sx + w - 2, contentBottom);
+      int y = contentTop;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         boolean expanded = Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()));
+         boolean hovered = mouseX >= sx + 6 && mouseX <= sx + w - 6 && mouseY >= y && mouseY < y + COMPACT_CAT_H;
+         if (hovered) {
+            int hAlpha = (int)(36.0F * alpha);
+            RoundedRectRenderer.draw(context, sx + 6, y, w - 12, COMPACT_CAT_H, 4, hAlpha << 24 | 0xFFFFFF);
+         }
+         int enabledCount = 0;
+         for (ModuleButton btn : cat.getModules()) {
+            if (btn.getModule().isEnabled()) {
+               enabledCount++;
+            }
+         }
+         this.drawStyledText(context, cat.getName(), sx + 12, y + COMPACT_CAT_H / 2 - this.textRenderer.fontHeight / 2, expanded ? accent.textColor : -1);
+         String count = enabledCount + "/" + cat.getModules().size();
+         int countW = this.textRenderer.getWidth(this.styledText(count));
+         this.drawStyledText(context, count, sx + w - 18 - countW, y + COMPACT_CAT_H / 2 - this.textRenderer.fontHeight / 2, -7829368);
+         String arrow = expanded ? "v" : ">";
+         this.drawStyledText(context, arrow, sx + w - 14, y + COMPACT_CAT_H / 2 - this.textRenderer.fontHeight / 2, accent.textColor);
+         y += COMPACT_CAT_H;
+         if (expanded) {
+            for (ModuleButton btn : cat.getModules()) {
+               Module mod = btn.getModule();
+               int rowH = COMPACT_MODULE_H;
+               boolean rowHover = mouseX >= sx + 14 && mouseX <= sx + w - 6 && mouseY >= y && mouseY < y + rowH;
+               btn.updateHover(rowHover);
+               if (mod.isEnabled()) {
+                  RoundedRectRenderer.draw(context, sx + 14, y, w - 20, rowH, 4, (int)(70.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
+               } else if (btn.hoverAmount > 0.01F) {
+                  int hAlpha = (int)(btn.hoverAmount * 30.0F * alpha);
+                  RoundedRectRenderer.draw(context, sx + 14, y, w - 20, rowH, 4, hAlpha << 24 | 0xFFFFFF);
+               }
+               int nameColor = mod.isEnabled() ? -1 : -5592406;
+               this.drawStyledText(context, mod.getName(), sx + 18, y + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
+               if (mod.hasSettings()) {
+                  String marrow = mod.isSettingsExpanded() ? "v" : ">";
+                  this.drawStyledText(context, marrow, sx + w - 16, y + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
+               }
+               y += rowH;
+               if (mod.isSettingsExpanded() && mod.hasSettings()) {
+                  for (ModuleSetting setting : mod.getSettings()) {
+                     this.renderSetting(context, setting, sx + 8, y, mouseX, mouseY, accent, alpha, contentTop, contentBottom - contentTop);
+                     y += 16;
+                  }
+                  y += 4;
+               }
+            }
+         }
+      }
+      context.disableScissor();
+   }
+
+   private boolean mouseClickedCompact(double mouseX, double mouseY, int button) {
+      int sx = this.compactStartX();
+      int sy = this.compactStartY();
+      int w = COMPACT_PANEL_W;
+      int h = this.compactPanelH();
+      int contentTop = sy + COMPACT_HEADER_H + 4;
+      int contentBottom = sy + h - 4;
+      if (mouseY < contentTop || mouseY > contentBottom || mouseX < sx + 6 || mouseX > sx + w - 6) {
+         return super.mouseClicked(mouseX, mouseY, button);
+      }
+      int y = contentTop;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         boolean expanded = Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()));
+         if (mouseY >= y && mouseY < y + COMPACT_CAT_H) {
+            this.compactExpanded.put(cat.getName(), !expanded);
+            return true;
+         }
+         y += COMPACT_CAT_H;
+         if (expanded) {
+            for (ModuleButton btn : cat.getModules()) {
+               Module mod = btn.getModule();
+               int rowH = COMPACT_MODULE_H;
+               if (mouseY >= y && mouseY < y + rowH) {
+                  if (button == 0) {
+                     if (mod.hasSettings() && mouseX >= sx + w - 22) {
+                        mod.toggleSettingsExpanded();
+                     } else {
+                        mod.toggle();
+                     }
+                  } else if (button == 1 && mod.hasSettings()) {
+                     mod.toggleSettingsExpanded();
+                  }
+                  return true;
+               }
+               y += rowH;
+               if (mod.isSettingsExpanded() && mod.hasSettings()) {
+                  for (ModuleSetting setting : mod.getSettings()) {
+                     if (mouseY >= y && mouseY < y + 16) {
+                        this.handleDogenSettingClick(setting, sx + 8, w - 16, y, mouseX);
+                        return true;
+                     }
+                     y += 16;
+                  }
+                  y += 4;
+               }
+            }
+         }
+      }
+      return super.mouseClicked(mouseX, mouseY, button);
+   }
+
+   private boolean mouseScrolledCompact(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+   }
+
+   private int cardsRows() {
+      return (this.categories.size() + CARDS_COLS - 1) / CARDS_COLS;
+   }
+
+   private int cardsGridW() {
+      return CARDS_COLS * CARDS_W + (CARDS_COLS - 1) * CARDS_GAP;
+   }
+
+   private int cardsGridH() {
+      return this.cardsRows() * CARDS_H + (this.cardsRows() - 1) * CARDS_GAP;
+   }
+
+   private int cardsGridX() {
+      return (this.width - this.cardsGridW()) / 2;
+   }
+
+   private int cardsGridY() {
+      return Math.max(80, (this.height - this.cardsGridH()) / 2);
+   }
+
+   private void renderCardsLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      float alpha = this.openProgress;
+      int brandW = this.brandRowWidth(22);
+      int brandH = 32;
+      int brandX = (this.width - brandW) / 2;
+      int brandY = this.cardsGridY() - brandH - 12 + (int)((1.0F - alpha) * -10.0F);
+      this.drawPanelBg(context, brandX, brandY, brandW, brandH, accent);
+      RoundedRectRenderer.draw(context, brandX, brandY, 2, brandH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
+      this.drawBrandRow(context, brandX, brandY, brandH, accent);
+
+      int gx = this.cardsGridX();
+      int gy = this.cardsGridY();
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         int row = i / CARDS_COLS;
+         int col = i % CARDS_COLS;
+         int cardSlide = (int)((1.0F - alpha) * (float)(20 + (row + col) * 8));
+         int x = gx + col * (CARDS_W + CARDS_GAP);
+         int y = gy + row * (CARDS_H + CARDS_GAP) + cardSlide;
+         boolean hovered = mouseX >= x && mouseX <= x + CARDS_W && mouseY >= y && mouseY < y + CARDS_H;
+         this.drawPanelBg(context, x, y, CARDS_W, CARDS_H, accent);
+         RoundedRectRenderer.draw(context, x, y, 2, CARDS_H, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
+         if (hovered) {
+            RoundedRectRenderer.draw(context, x, y, CARDS_W, CARDS_H, 8, 0x18FFFFFF);
+         }
+         int enabledCount = 0;
+         for (ModuleButton btn : cat.getModules()) {
+            if (btn.getModule().isEnabled()) {
+               enabledCount++;
+            }
+         }
+         int nameW = this.textRenderer.getWidth(this.styledText(cat.getName()));
+         this.drawStyledText(context, cat.getName(), x + CARDS_W / 2 - nameW / 2, y + 18, -1);
+         String sub = enabledCount + " / " + cat.getModules().size() + " enabled";
+         int subW = this.textRenderer.getWidth(this.styledText(sub));
+         this.drawStyledText(context, sub, x + CARDS_W / 2 - subW / 2, y + CARDS_H - 18, accent.textColor);
+         if (enabledCount > 0) {
+            int barW = (int)((float)(CARDS_W - 24) * ((float)enabledCount / (float)Math.max(1, cat.getModules().size())));
+            RoundedRectRenderer.draw(context, x + 12, y + CARDS_H - 28, CARDS_W - 24, 2, 1, 0x40FFFFFF);
+            RoundedRectRenderer.draw(context, x + 12, y + CARDS_H - 28, barW, 2, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
+         }
+      }
+
+      if (this.cardsOpenCategory >= 0 && this.cardsOpenCategory < this.categories.size()) {
+         context.fill(0, 0, this.width, this.height, 0xA0000000);
+         int ow = CARDS_OVERLAY_W;
+         int oh = CARDS_OVERLAY_H;
+         int ox = (this.width - ow) / 2;
+         int oy = (this.height - oh) / 2;
+         this.drawPanelBg(context, ox, oy, ow, oh, accent);
+         RoundedRectRenderer.draw(context, ox, oy, 2, oh, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
+         Category openCat = this.categories.get(this.cardsOpenCategory);
+         this.drawBrandRow(context, ox, oy, 30, accent);
+         int brandRowW = this.brandRowWidth(20);
+         int sepX = ox + brandRowW;
+         context.fill(sepX, oy + 8, sepX + 1, oy + 30 - 8, 0x40FFFFFF);
+         this.drawStyledText(context, openCat.getName(), sepX + 8, oy + 30 / 2 - this.textRenderer.fontHeight / 2, -1);
+         String closeStr = "x";
+         int closeW = this.textRenderer.getWidth(this.styledText(closeStr));
+         this.drawStyledText(context, closeStr, ox + ow - 12 - closeW, oy + 30 / 2 - this.textRenderer.fontHeight / 2, accent.textColor);
+
+         int listTop = oy + 30 + 4;
+         int listBottom = oy + oh - 6;
+         String key = "cards:" + openCat.getName();
+         int scroll = this.scrollOffsets.getOrDefault(key, 0);
+         context.enableScissor(ox + 4, listTop, ox + ow - 4, listBottom);
+         int rowY = listTop + 2 - scroll;
+         for (ModuleButton btn : openCat.getModules()) {
+            Module mod = btn.getModule();
+            int rowH = 22;
+            boolean rowHover = mouseX >= ox + 8 && mouseX <= ox + ow - 8 && mouseY >= rowY && mouseY < rowY + rowH
+               && mouseY >= listTop && mouseY < listBottom;
+            btn.updateHover(rowHover);
+            if (mod.isEnabled()) {
+               RoundedRectRenderer.draw(context, ox + 8, rowY, ow - 16, rowH, 5, (int)(76.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
+            } else if (btn.hoverAmount > 0.01F) {
+               int hAlpha = (int)(btn.hoverAmount * 32.0F * alpha);
+               RoundedRectRenderer.draw(context, ox + 8, rowY, ow - 16, rowH, 5, hAlpha << 24 | 0xFFFFFF);
+            }
+            int nameColor = mod.isEnabled() ? -1 : -3355444;
+            this.drawStyledText(context, mod.getName(), ox + 16, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
+            int sw = 22;
+            int sh = 12;
+            int toggleX = ox + ow - 16 - sw;
+            int toggleY = rowY + rowH / 2 - sh / 2;
+            int bgColor = mod.isEnabled() ? 0xC0000000 | (accent.textColor & 0xFFFFFF) : 0x80444444;
+            RoundedRectRenderer.draw(context, toggleX, toggleY, sw, sh, sh / 2, bgColor);
+            int knobD = sh - 2;
+            int knobX = mod.isEnabled() ? toggleX + sw - knobD - 1 : toggleX + 1;
+            RoundedRectRenderer.draw(context, knobX, toggleY + 1, knobD, knobD, knobD / 2, -1);
+            if (mod.hasSettings()) {
+               String marrow = mod.isSettingsExpanded() ? "v" : ">";
+               this.drawStyledText(context, marrow, toggleX - 14, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
+            }
+            rowY += rowH;
+            if (mod.isSettingsExpanded() && mod.hasSettings()) {
+               for (ModuleSetting setting : mod.getSettings()) {
+                  this.renderSetting(context, setting, ox + 4, rowY, mouseX, mouseY, accent, alpha, listTop, listBottom - listTop);
+                  rowY += 16;
+               }
+               rowY += 4;
+            }
+         }
+         context.disableScissor();
+      }
+   }
+
+   private boolean mouseClickedCards(double mouseX, double mouseY, int button) {
+      if (this.cardsOpenCategory >= 0 && this.cardsOpenCategory < this.categories.size()) {
+         int ow = CARDS_OVERLAY_W;
+         int oh = CARDS_OVERLAY_H;
+         int ox = (this.width - ow) / 2;
+         int oy = (this.height - oh) / 2;
+         if (mouseX < ox || mouseX > ox + ow || mouseY < oy || mouseY > oy + oh) {
+            this.cardsOpenCategory = -1;
+            return true;
+         }
+         int closeW = this.textRenderer.getWidth(this.styledText("x"));
+         if (mouseX >= ox + ow - 14 - closeW && mouseX <= ox + ow - 4 && mouseY >= oy + 4 && mouseY < oy + 30 - 4) {
+            this.cardsOpenCategory = -1;
+            return true;
+         }
+         Category openCat = this.categories.get(this.cardsOpenCategory);
+         int listTop = oy + 30 + 4;
+         int listBottom = oy + oh - 6;
+         if (mouseY < listTop || mouseY > listBottom) {
+            return true;
+         }
+         String key = "cards:" + openCat.getName();
+         int scroll = this.scrollOffsets.getOrDefault(key, 0);
+         int rowY = listTop + 2 - scroll;
+         for (ModuleButton btn : openCat.getModules()) {
+            Module mod = btn.getModule();
+            int rowH = 22;
+            if (mouseY >= rowY && mouseY < rowY + rowH) {
+               int sw = 22;
+               int toggleX = ox + ow - 16 - sw;
+               boolean clickedToggle = mouseX >= toggleX && mouseX <= toggleX + sw;
+               if (button == 0) {
+                  if (clickedToggle) {
+                     mod.toggle();
+                  } else if (mod.hasSettings()) {
+                     mod.toggleSettingsExpanded();
+                  } else {
+                     mod.toggle();
+                  }
+               } else if (button == 1 && mod.hasSettings()) {
+                  mod.toggleSettingsExpanded();
+               }
+               return true;
+            }
+            rowY += rowH;
+            if (mod.isSettingsExpanded() && mod.hasSettings()) {
+               for (ModuleSetting setting : mod.getSettings()) {
+                  if (mouseY >= rowY && mouseY < rowY + 16) {
+                     this.handleDogenSettingClick(setting, ox + 4, ow - 8, rowY, mouseX);
+                     return true;
+                  }
+                  rowY += 16;
+               }
+               rowY += 4;
+            }
+         }
+         return true;
+      }
+      int gx = this.cardsGridX();
+      int gy = this.cardsGridY();
+      for (int i = 0; i < this.categories.size(); i++) {
+         int row = i / CARDS_COLS;
+         int col = i % CARDS_COLS;
+         int x = gx + col * (CARDS_W + CARDS_GAP);
+         int y = gy + row * (CARDS_H + CARDS_GAP);
+         if (mouseX >= x && mouseX <= x + CARDS_W && mouseY >= y && mouseY < y + CARDS_H) {
+            this.cardsOpenCategory = i;
+            return true;
+         }
+      }
+      return super.mouseClicked(mouseX, mouseY, button);
+   }
+
+   private boolean mouseScrolledCards(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      if (this.cardsOpenCategory < 0 || this.cardsOpenCategory >= this.categories.size()) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      int ow = CARDS_OVERLAY_W;
+      int oh = CARDS_OVERLAY_H;
+      int ox = (this.width - ow) / 2;
+      int oy = (this.height - oh) / 2;
+      if (mouseX < ox || mouseX > ox + ow || mouseY < oy || mouseY > oy + oh) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      Category cat = this.categories.get(this.cardsOpenCategory);
+      String key = "cards:" + cat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      scroll -= (int)(verticalAmount * 10.0);
+      int totalH = 4;
+      for (ModuleButton btn : cat.getModules()) {
+         totalH += 22;
+         Module mod = btn.getModule();
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            totalH += mod.getSettings().size() * 16 + 4;
+         }
+      }
+      int viewH = oh - 30 - 10;
+      int maxScroll = Math.max(0, totalH - viewH);
+      scroll = Math.max(0, Math.min(maxScroll, scroll));
+      this.scrollOffsets.put(key, scroll);
+      return true;
+   }
+
+   public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+      if (this.getStyle() == Style.CARDS && this.cardsOpenCategory >= 0 && keyCode == 256) {
+         this.cardsOpenCategory = -1;
+         return true;
+      }
+      return super.keyPressed(keyCode, scanCode, modifiers);
    }
 
    public boolean shouldPause() {
