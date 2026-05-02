@@ -1,6 +1,7 @@
 package com.pathdlc.digger.hud;
 
 import com.pathdlc.digger.event.AutoEventBot;
+import com.pathdlc.digger.gui.ClickGuiScreen;
 import com.pathdlc.digger.gui.GuiSettings;
 import com.pathdlc.digger.gui.Module;
 import com.pathdlc.digger.gui.ModuleManager;
@@ -68,7 +69,7 @@ public final class HudRenderer {
          || client.player == null
          || client.world == null
          || client.options.hudHidden
-         || client.currentScreen != null) {
+         || client.currentScreen instanceof ClickGuiScreen) {
          return;
       }
 
@@ -149,12 +150,12 @@ public final class HudRenderer {
          cells[i][0] = e.name;
          cells[i][1] = dist >= 0.0 ? String.format("%dm", (int) Math.round(dist)) : "--";
          cells[i][2] = AutoEventBot.formatCountdown(e);
-         int w = tr.getWidth(styledText(cells[i][0])) + tr.getWidth(styledText(cells[i][1])) + tr.getWidth(styledText(cells[i][2])) + 60;
+         int w = tr.getWidth(plainText(cells[i][0])) + tr.getWidth(plainText(cells[i][1])) + tr.getWidth(plainText(cells[i][2])) + 60;
          if (w > maxRowW) {
             maxRowW = w;
          }
       }
-      int headerLabelW = tr.getWidth(styledText("Events on FunTime"));
+      int headerLabelW = tr.getWidth(styledText("Events"));
       int rowW = Math.max(maxRowW, headerLabelW + 32);
       int x = sw / 2 - rowW / 2;
       int y = MARGIN + 4;
@@ -162,14 +163,14 @@ public final class HudRenderer {
       RoundedRectRenderer.draw(context, x, y, rowW, totalH, 6, 0xCC1A0A0F);
 
       int textY = y + PAD_Y;
-      context.drawText(tr, styledText("Events on FunTime"), x + PAD_X, textY, 0xFFFFFFFF, true);
+      context.drawText(tr, styledText("Events"), x + PAD_X, textY, 0xFFFFFFFF, true);
       context.fill(x + 4, y + headerH, x + rowW - 4, y + headerH + 1, 0x40FFFFFF);
 
       int rowY = y + headerH + 2;
       for (int i = 0; i < events.size(); i++) {
-         Text name = styledText(cells[i][0]);
-         Text dist = styledText(cells[i][1]);
-         Text countdown = styledText(cells[i][2]);
+         Text name = plainText(cells[i][0]);
+         Text dist = plainText(cells[i][1]);
+         Text countdown = plainText(cells[i][2]);
          int distW = tr.getWidth(dist);
          int cdW = tr.getWidth(countdown);
          int rowTextY = rowY + rowH / 2 - tr.fontHeight / 2;
@@ -224,7 +225,7 @@ public final class HudRenderer {
    }
 
    private static int renderInfoRow(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int x, int y, String text) {
-      Text label = styledText(text);
+      Text label = plainText(text);
       int textW = tr.getWidth(label);
       int rowH = tr.fontHeight + PAD_Y * 2;
       int rowW = textW + PAD_X * 2;
@@ -238,7 +239,7 @@ public final class HudRenderer {
    }
 
    private static int renderInfoRowRight(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int rightX, int y, String text) {
-      Text label = styledText(text);
+      Text label = plainText(text);
       int textW = tr.getWidth(label);
       int rowH = tr.fontHeight + PAD_Y * 2;
       int rowW = textW + PAD_X * 2;
@@ -294,8 +295,8 @@ public final class HudRenderer {
       float distance = client.player.distanceTo(target);
 
       int logoSize = TARGET_AVATAR_SIZE;
-      Text nameLabel = styledText(name);
-      Text statsLabel = styledText(String.format("%.1f / %.1f HP   %.1fm", health, maxHealth, distance));
+      Text nameLabel = plainText(name);
+      Text statsLabel = plainText(String.format("%.1f / %.1f HP   %.1fm", health, maxHealth, distance));
       int nameW = tr.getWidth(nameLabel);
       int statsW = tr.getWidth(statsLabel);
       int textBlockW = Math.max(nameW, statsW);
@@ -490,5 +491,9 @@ public final class HudRenderer {
 
    private static Text styledText(String s) {
       return StyledTextCache.get(s, CUSTOM_FONT);
+   }
+
+   private static Text plainText(String s) {
+      return Text.literal(s == null ? "" : s);
    }
 }
