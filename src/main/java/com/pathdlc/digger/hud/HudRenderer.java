@@ -135,9 +135,140 @@ public final class HudRenderer {
          renderKeystrokes(context, tr, accent, sw, sh, client);
       }
 
+      if (widgetEnabled("ArmorHUD", false)) {
+         renderArmorHud(context, tr, sw, sh, client);
+      }
+
+      if (widgetEnabled("ItemCounter", false)) {
+         renderItemCounter(context, tr, accent, sw, sh, client);
+      }
+
+      if (widgetEnabled("PotionEffects", false)) {
+         renderPotionEffects(context, tr, accent, sw, client);
+      }
+
       if (ModuleManager.isEnabled("AutoEvent")) {
          renderAutoEvent(context, tr, accent, sw);
       }
+   }
+
+   private static void renderArmorHud(DrawContext context, TextRenderer tr, int sw, int sh, MinecraftClient client) {
+      // Hotbar is centered at sw/2, occupies width 182 and height 22.
+      // We sit immediately above the hotbar, mirroring its slot grid.
+      var inv = client.player.getInventory();
+      net.minecraft.item.ItemStack[] armor = new net.minecraft.item.ItemStack[]{
+            inv.getArmorStack(3), // helmet
+            inv.getArmorStack(2), // chestplate
+            inv.getArmorStack(1), // leggings
+            inv.getArmorStack(0)  // boots
+      };
+      int slotSize = 16;
+      int gap = 4;
+      int totalW = slotSize * 4 + gap * 3;
+      int x = (sw - totalW) / 2;
+      int y = sh - 60;
+
+      net.minecraft.item.ItemStack offhand = inv.offHand.get(0);
+      if (offhand != null && !offhand.isEmpty()) {
+         // Avoid clipping the offhand slot.
+         x -= 12;
+      }
+
+      for (int i = 0; i < armor.length; i++) {
+         net.minecraft.item.ItemStack stack = armor[i];
+         if (stack == null || stack.isEmpty()) {
+            continue;
+         }
+         int sx = x + i * (slotSize + gap);
+         context.drawItem(stack, sx, y);
+         context.drawStackOverlay(tr, stack, sx, y);
+      }
+   }
+
+   private static void renderItemCounter(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw, int sh, MinecraftClient client) {
+      var inv = client.player.getInventory();
+      java.util.List<net.minecraft.item.Item> tracked = java.util.Arrays.asList(
+            net.minecraft.item.Items.ENCHANTED_GOLDEN_APPLE,
+            net.minecraft.item.Items.GOLDEN_APPLE,
+            net.minecraft.item.Items.ENDER_PEARL,
+            net.minecraft.item.Items.TOTEM_OF_UNDYING,
+            net.minecraft.item.Items.ARROW
+      );
+      int[] counts = new int[tracked.size()];
+      for (int i = 0; i < inv.size(); i++) {
+         net.minecraft.item.ItemStack s = inv.getStack(i);
+         if (s == null || s.isEmpty()) continue;
+         int idx = tracked.indexOf(s.getItem());
+         if (idx >= 0) {
+            counts[idx] += s.getCount();
+         }
+      }
+      int slotSize = 16;
+      int rowH = 18;
+      int x = MARGIN;
+      int yStart = sh / 2 - tracked.size() * rowH / 2;
+      int drawn = 0;
+      for (int i = 0; i < tracked.size(); i++) {
+         if (counts[i] <= 0) continue;
+         int row = yStart + drawn * rowH;
+         net.minecraft.item.ItemStack icon = new net.minecraft.item.ItemStack(tracked.get(i));
+         RoundedRectRenderer.draw(context, x, row, slotSize + 32, slotSize + 2, 3, 0xC01A0A0F);
+         context.drawItem(icon, x + 1, row + 1);
+         String label = "x" + counts[i];
+         context.drawText(tr, label, x + slotSize + 4, row + 5, 0xFFFFFFFF, false);
+         drawn++;
+      }
+   }
+
+   private static void renderPotionEffects(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw, MinecraftClient client) {
+      java.util.Collection<net.minecraft.entity.effect.StatusEffectInstance> effects = client.player.getStatusEffects();
+      if (effects.isEmpty()) return;
+      int rowH = 14;
+      int padX = 6;
+      int padY = 3;
+      int rightX = sw - MARGIN;
+      int yStart = MARGIN + 60; // below watermark/music
+      int idx = 0;
+      for (net.minecraft.entity.effect.StatusEffectInstance e : effects) {
+         String name = net.minecraft.client.resource.language.I18n.translate(
+               e.getEffectType().value().getTranslationKey());
+         int amp = e.getAmplifier();
+         if (amp > 0) name += " " + romanNumeral(amp + 1);
+         String time = formatPotionTime(e.getDuration());
+         String label = name + " " + time;
+         int textW = tr.getWidth(label);
+         int rowW = textW + padX * 2;
+         int x = rightX - rowW;
+         int y = yStart + idx * (rowH + 2);
+         RoundedRectRenderer.draw(context, x, y, rowW, rowH + padY * 2, 3, 0xC01A0A0F);
+         int color = 0xFF000000 | (accent.textColor & 0xFFFFFF);
+         context.drawText(tr, label, x + padX, y + padY + 2, color, false);
+         idx++;
+      }
+   }
+
+   private static String romanNumeral(int n) {
+      switch (n) {
+         case 1: return "I";
+         case 2: return "II";
+         case 3: return "III";
+         case 4: return "IV";
+         case 5: return "V";
+         case 6: return "VI";
+         case 7: return "VII";
+         case 8: return "VIII";
+         case 9: return "IX";
+         case 10: return "X";
+         default: return "" + n;
+      }
+   }
+
+   private static String formatPotionTime(int durationTicks) {
+      if (durationTicks >= 32_767 * 20) return "**:**"; // infinite
+      int seconds = durationTicks / 20;
+      int m = seconds / 60;
+      int s = seconds % 60;
+      return String.format("%d:%02d", m, s);
    }
 
    private static void renderKeystrokes(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw, int sh, MinecraftClient client) {

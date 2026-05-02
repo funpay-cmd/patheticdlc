@@ -56,11 +56,52 @@ public final class VisualEffectsHook {
       }
       wasOnGround = onGround;
 
+      tickTrails(world, player);
+
       slowTickCounter++;
       if (slowTickCounter % 4 == 0) {
          tickTargetEffect(mc, world);
          tickChinaHat(mc, world);
       }
+   }
+
+   private static double lastTrailX = Double.NaN;
+   private static double lastTrailY = Double.NaN;
+   private static double lastTrailZ = Double.NaN;
+
+   private static void tickTrails(ClientWorld world, ClientPlayerEntity player) {
+      if (!ModuleManager.isEnabled("Trails")) {
+         lastTrailX = Double.NaN;
+         return;
+      }
+      double px = player.getX();
+      double py = player.getY() + 0.1;
+      double pz = player.getZ();
+      if (Double.isNaN(lastTrailX)) {
+         lastTrailX = px;
+         lastTrailY = py;
+         lastTrailZ = pz;
+         return;
+      }
+      double dx = px - lastTrailX;
+      double dz = pz - lastTrailZ;
+      double moved2 = dx * dx + dz * dz;
+      // Only spawn when moving — stationary players don't trail.
+      if (moved2 < 0.0008D) {
+         return;
+      }
+      ParticleEffect effect = pickParticle("Trails", "Type", ParticleTypes.END_ROD);
+      // Interpolate a few particles along the segment for smoothness.
+      int steps = 3;
+      for (int i = 1; i <= steps; i++) {
+         double t = i / (double) steps;
+         double x = lastTrailX + dx * t;
+         double z = lastTrailZ + dz * t;
+         world.addParticle(effect, x, py, z, 0.0, 0.0, 0.0);
+      }
+      lastTrailX = px;
+      lastTrailY = py;
+      lastTrailZ = pz;
    }
 
    private static void tickTargetEffect(MinecraftClient mc, ClientWorld world) {

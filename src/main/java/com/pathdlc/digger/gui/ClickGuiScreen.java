@@ -144,6 +144,9 @@ public class ClickGuiScreen extends Screen {
 
          Module tntTimer = new Module("TNTTimer");
 
+         Module trails = new Module("Trails");
+         trails.addSetting(ModuleSetting.choice("Type", particleChoices, 1));
+
          Module noRender = new Module("NoRender");
          noRender.addSetting(ModuleSetting.toggle("BossBar", false));
          noRender.addSetting(ModuleSetting.toggle("Scoreboard", false));
@@ -166,6 +169,7 @@ public class ClickGuiScreen extends Screen {
          world.addModule(crosshair);
          world.addModule(zoom);
          world.addModule(tntTimer);
+         world.addModule(trails);
          world.addModule(noRender);
          world.addModule(autoRespawn);
          world.addModule(autoReconnect);
@@ -183,6 +187,9 @@ public class ClickGuiScreen extends Screen {
          hudOptions.addSetting(ModuleSetting.toggle("TargetHUD", true));
          hudOptions.addSetting(ModuleSetting.toggle("Music", true));
          hudOptions.addSetting(ModuleSetting.toggle("Keystrokes", false));
+         hudOptions.addSetting(ModuleSetting.toggle("ArmorHUD", false));
+         hudOptions.addSetting(ModuleSetting.toggle("ItemCounter", false));
+         hudOptions.addSetting(ModuleSetting.toggle("PotionEffects", false));
          hudOptions.setEnabled(true);
          Category hud = new Category("HUD", 0.0F, 0.0F);
          hud.addModule(hudOptions);
@@ -191,11 +198,21 @@ public class ClickGuiScreen extends Screen {
          Module menuStyle = new Module("MenuStyle");
          menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen", "Tabs", "Compact", "Cards"}, 0));
          menuStyle.addSetting(ModuleSetting.choice("Background", new String[]{"Default", "Fever"}, 0));
+         Module clientName = new Module("ClientName");
+         clientName.addSetting(ModuleSetting.choice("Format",
+               new String[]{
+                     "WareVisuals %fps% FPS",
+                     "WareVisuals - %name%",
+                     "WareVisuals %ver% | %fps% FPS | %ping% ms",
+                     "%name% — %fps% FPS — %time%"
+               }, 0));
+
          Module sounds = new Module("Sounds");
          sounds.addSetting(ModuleSetting.slider("Volume", 0.6F, 0.0F, 1.0F, 0.05F));
          sounds.setEnabled(true);
          Category settings = new Category("Settings", 0.0F, 0.0F);
          settings.addModule(menuStyle);
+         settings.addModule(clientName);
          settings.addModule(sounds);
          this.categories.add(settings);
 

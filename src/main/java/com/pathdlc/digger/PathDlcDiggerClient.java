@@ -15,6 +15,7 @@ import com.pathdlc.digger.hud.HudRenderer;
 import com.pathdlc.digger.hud.SystemMediaTracker;
 import com.pathdlc.digger.render.BlockESPRenderer;
 import com.pathdlc.digger.render.BlockOverlayRenderer;
+import com.pathdlc.digger.render.ClientNameHandler;
 import com.pathdlc.digger.render.CrosshairRenderer;
 import com.pathdlc.digger.render.HitEffectsRenderer;
 import com.pathdlc.digger.render.PerformanceSettings;
@@ -92,6 +93,7 @@ public class PathDlcDiggerClient implements ClientModInitializer {
                WorldStateController.tick(client);
                VisualEffectsHook.onClientTick(client);
                ZoomHandler.tick();
+               ClientNameHandler.tick();
             }
          );
       WorldRenderEvents.AFTER_ENTITIES.register((AfterEntities)context -> {
