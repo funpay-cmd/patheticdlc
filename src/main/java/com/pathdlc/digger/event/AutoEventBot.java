@@ -96,6 +96,10 @@ public final class AutoEventBot {
       "(?i)(\\d{1,3})\\s*сек(?:унд)?[ауы]?"
    );
    private static final Pattern TIMER_HMS = Pattern.compile("(\\d{1,2}):(\\d{2})(?::(\\d{2}))?");
+   private static final Pattern TIMER_HMS_HINT = Pattern.compile(
+      "(?i)(?:осталось|через|до\\s+старта|до\\s+начал|до\\s+извержени|остается|left|in\\s+\\d|countdown|таймер|осталос[ьня])",
+      Pattern.UNICODE_CHARACTER_CLASS
+   );
 
    private AutoEventBot() {
    }
@@ -352,16 +356,34 @@ public final class AutoEventBot {
          } catch (NumberFormatException ignored) {
          }
       }
+      // TIMER_HMS only fires when the line *also* contains a hint that it
+      // really is a countdown (e.g. "осталось", "через", "до старта"). Without
+      // that hint a colon-separated pair like "4:53" is ambiguous between a
+      // 4 minute 53 second countdown and a 4:53 server clock; both readings
+      // exist on FunTime so we just skip rather than guess and inflate the
+      // ETA by 60x.
+      if (!TIMER_HMS_HINT.matcher(line).find()) {
+         return 0L;
+      }
       Matcher h = TIMER_HMS.matcher(line);
       if (h.find()) {
          try {
-            int hh = Integer.parseInt(h.group(1));
-            int mm = Integer.parseInt(h.group(2));
-            int ss = h.group(3) != null ? Integer.parseInt(h.group(3)) : 0;
-            if (hh > 23 || mm > 59 || ss > 59) {
+            int a = Integer.parseInt(h.group(1));
+            int b = Integer.parseInt(h.group(2));
+            String thirdRaw = h.group(3);
+            if (thirdRaw == null) {
+               // 2-component form. Treat as MM:SS — the common case for the
+               // FunTime "/event delay" reply ("осталось 4:53").
+               if (a > 59 || b > 59) {
+                  return 0L;
+               }
+               return (long) a * 60L + b;
+            }
+            int c = Integer.parseInt(thirdRaw);
+            if (a > 23 || b > 59 || c > 59) {
                return 0L;
             }
-            return (long) hh * 3600L + (long) mm * 60L + ss;
+            return (long) a * 3600L + (long) b * 60L + c;
          } catch (NumberFormatException ignored) {
          }
       }

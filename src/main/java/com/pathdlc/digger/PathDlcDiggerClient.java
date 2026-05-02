@@ -54,7 +54,11 @@ public class PathDlcDiggerClient implements ClientModInitializer {
             return !handled;
          }
       });
-      ClientReceiveMessageEvents.GAME.register((message, overlay) -> AutoEventBot.onChatMessage(message));
+      ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+         if (!overlay) {
+            AutoEventBot.onChatMessage(message);
+         }
+      });
       ClientTickEvents.END_CLIENT_TICK
          .register(
             (EndTick)client -> {
