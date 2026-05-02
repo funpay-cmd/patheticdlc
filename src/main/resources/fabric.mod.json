@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "pathdlc_digger",
   "version": "${version}",
-  "name": "PathDLC Baritone Digger",
-  "description": "Client-side area digger and fill shell planner for Fabric 1.21.4, designed to work with Baritone installed separately.",
+  "name": "WareVisuals",
+  "description": "WareVisuals — Fabric 1.21.4 client mod with a Liquid Glass ClickGUI (Colon and Dogen layouts), custom font and utility helpers for building.",
   "authors": [
-    "PathDLC"
+    "WareVisuals"
   ],
   "license": "MIT",
   "environment": "client",

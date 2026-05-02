@@ -32,7 +32,7 @@ public class CustomTitleScreen extends Screen {
    private final float[] pa = new float[40];
 
    public CustomTitleScreen() {
-      super(Text.literal("PathDLC"));
+      super(Text.literal("WareVisuals"));
    }
 
    protected void init() {
@@ -113,7 +113,7 @@ public class CustomTitleScreen extends Screen {
    private void renderTitle(DrawContext context, long elapsed) {
       float titleProgress = Math.min(1.0F, (float)elapsed / 600.0F) * this.openProgress;
       if (!(titleProgress < 0.01F)) {
-         String title = "PathDLC";
+         String title = "WareVisuals";
          int titleW = this.textRenderer.getWidth(title) * 3;
          int titleX = this.width / 2 - titleW / 6;
          int titleY = this.height / 2 - LABELS.length * 34 / 2 - 50;
@@ -134,7 +134,7 @@ public class CustomTitleScreen extends Screen {
          context.drawText(this.textRenderer, Text.literal(title), titleX / 3, titleY / 3, titleColor, true);
          context.getMatrices().pop();
          int subtitleA = (int)(titleProgress * 120.0F);
-         String subtitle = "Digger v1.21.4";
+         String subtitle = "v1.21.4 · Fabric";
          int subW = this.textRenderer.getWidth(subtitle);
          context.drawText(
             this.textRenderer, Text.literal(subtitle), this.width / 2 - subW / 2, titleY + 22, subtitleA << 24 | 8952268, false
@@ -190,7 +190,7 @@ public class CustomTitleScreen extends Screen {
    private void renderFooter(DrawContext context) {
       int a = (int)(this.openProgress * 80.0F);
       int color = a << 24 | 6715272;
-      context.drawText(this.textRenderer, Text.literal("PathDLC Digger"), 6, this.height - 14, color, false);
+      context.drawText(this.textRenderer, Text.literal("WareVisuals"), 6, this.height - 14, color, false);
       String right = "Minecraft 1.21.4";
       int rw = this.textRenderer.getWidth(right);
       context.drawText(this.textRenderer, Text.literal(right), this.width - rw - 6, this.height - 14, color, false);

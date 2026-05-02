@@ -39,7 +39,7 @@ import net.minecraft.client.option.KeyBinding;
 
 public class PathDlcDiggerClient implements ClientModInitializer {
    public static final String MOD_ID = "pathdlc_digger";
-   public static final String NAME = "PathDLC Digger";
+   public static final String NAME = "WareVisuals";
    private static final SelectionManager SELECTION = new SelectionManager();
    private static final BaritoneBridge BARITONE = new BaritoneBridge();
    private static final DiggerBot DIGGER = new DiggerBot(SELECTION, BARITONE);
@@ -135,6 +135,6 @@ public class PathDlcDiggerClient implements ClientModInitializer {
 
          PerformanceSettings.onFrameEnd();
       });
-      Chat.later("PathDLC loaded. Commands: .pos, .fill, .dig baritone, .apple, .clan, .warden");
+      Chat.later("WareVisuals loaded. Commands: .pos, .fill, .dig baritone, .apple, .clan, .warden");
    }
 }
