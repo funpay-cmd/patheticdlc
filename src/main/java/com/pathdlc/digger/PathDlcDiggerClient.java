@@ -15,9 +15,12 @@ import com.pathdlc.digger.hud.HudRenderer;
 import com.pathdlc.digger.hud.SystemMediaTracker;
 import com.pathdlc.digger.render.BlockESPRenderer;
 import com.pathdlc.digger.render.BlockOverlayRenderer;
+import com.pathdlc.digger.render.CrosshairRenderer;
 import com.pathdlc.digger.render.HitEffectsRenderer;
 import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.SelectionRenderer;
+import com.pathdlc.digger.render.TntTimerRenderer;
+import com.pathdlc.digger.render.ZoomHandler;
 import com.pathdlc.digger.selection.SelectionManager;
 import com.pathdlc.digger.util.Chat;
 import com.pathdlc.digger.visual.VisualEffectsHook;
@@ -88,6 +91,7 @@ public class PathDlcDiggerClient implements ClientModInitializer {
                AutoEventBot.onClientTick(client);
                WorldStateController.tick(client);
                VisualEffectsHook.onClientTick(client);
+               ZoomHandler.tick();
             }
          );
       WorldRenderEvents.AFTER_ENTITIES.register((AfterEntities)context -> {
@@ -101,6 +105,7 @@ public class PathDlcDiggerClient implements ClientModInitializer {
          }
 
          EventBeaconRenderer.render(context);
+         TntTimerRenderer.render(context);
       });
       HudRenderCallback.EVENT.register((HudRenderCallback)(context, tickCounter) -> {
          if (HitEffectsRenderer.hasActiveEffects()) {
@@ -108,6 +113,7 @@ public class PathDlcDiggerClient implements ClientModInitializer {
          }
 
          HudRenderer.render(context);
+         CrosshairRenderer.render(context);
          PerformanceSettings.onFrameEnd();
       });
       SystemMediaTracker.start();

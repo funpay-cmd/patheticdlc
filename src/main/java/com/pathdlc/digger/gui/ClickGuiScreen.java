@@ -129,6 +129,18 @@ public class ClickGuiScreen extends Screen {
          Module chinaHat = new Module("ChinaHat");
          chinaHat.addSetting(ModuleSetting.choice("Type", particleChoices, 1));
 
+         Module crosshair = new Module("Crosshair");
+         crosshair.addSetting(ModuleSetting.choice("Style",
+               new String[]{"Cross", "Dot", "Plus", "X", "Circle", "Square"}, 0));
+         crosshair.addSetting(ModuleSetting.slider("Size", 5.0F, 2.0F, 10.0F, 1.0F));
+         crosshair.addSetting(ModuleSetting.slider("Gap", 2.0F, 0.0F, 6.0F, 1.0F));
+         crosshair.addSetting(ModuleSetting.toggle("Accent", false));
+
+         Module zoom = new Module("Zoom");
+         zoom.addSetting(ModuleSetting.slider("Zoom", 0.30F, 0.05F, 0.90F, 0.05F));
+
+         Module tntTimer = new Module("TNTTimer");
+
          Category world = new Category("World", 0.0F, 0.0F);
          world.addModule(fullBright);
          world.addModule(timeChanger);
@@ -141,6 +153,9 @@ public class ClickGuiScreen extends Screen {
          world.addModule(jumpCircle);
          world.addModule(targetEffect);
          world.addModule(chinaHat);
+         world.addModule(crosshair);
+         world.addModule(zoom);
+         world.addModule(tntTimer);
          world.addModule(autoRespawn);
          world.addModule(autoReconnect);
          world.addModule(blockEsp);
@@ -156,6 +171,7 @@ public class ClickGuiScreen extends Screen {
          hudOptions.addSetting(ModuleSetting.toggle("Time", false));
          hudOptions.addSetting(ModuleSetting.toggle("TargetHUD", true));
          hudOptions.addSetting(ModuleSetting.toggle("Music", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Keystrokes", false));
          hudOptions.setEnabled(true);
          Category hud = new Category("HUD", 0.0F, 0.0F);
          hud.addModule(hudOptions);
@@ -163,6 +179,7 @@ public class ClickGuiScreen extends Screen {
 
          Module menuStyle = new Module("MenuStyle");
          menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen", "Tabs", "Compact", "Cards"}, 0));
+         menuStyle.addSetting(ModuleSetting.choice("Background", new String[]{"Default", "Fever"}, 0));
          Module sounds = new Module("Sounds");
          sounds.addSetting(ModuleSetting.slider("Volume", 0.6F, 0.0F, 1.0F, 0.05F));
          sounds.setEnabled(true);

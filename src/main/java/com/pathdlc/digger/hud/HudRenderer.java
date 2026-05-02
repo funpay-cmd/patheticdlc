@@ -131,9 +131,69 @@ public final class HudRenderer {
          renderTargetHud(context, tr, accent, sw, sh, client);
       }
 
+      if (widgetEnabled("Keystrokes", false)) {
+         renderKeystrokes(context, tr, accent, sw, sh, client);
+      }
+
       if (ModuleManager.isEnabled("AutoEvent")) {
          renderAutoEvent(context, tr, accent, sw);
       }
+   }
+
+   private static void renderKeystrokes(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw, int sh, MinecraftClient client) {
+      // Bottom-center 3-row stack:
+      //   . W .
+      //   A S D
+      //   LMB RMB
+      int keySize = 18;
+      int gap = 2;
+      int gridW = keySize * 3 + gap * 2;
+      int wideW = (gridW - gap) / 2;
+      int gridH = keySize * 2 + gap;
+      int totalH = gridH + gap + keySize;
+
+      int x0 = (sw - gridW) / 2;
+      int y0 = sh - totalH - MARGIN - 28;
+
+      boolean fwd = client.options.forwardKey.isPressed();
+      boolean back = client.options.backKey.isPressed();
+      boolean left = client.options.leftKey.isPressed();
+      boolean right = client.options.rightKey.isPressed();
+      boolean attack = client.options.attackKey.isPressed();
+      boolean use = client.options.useKey.isPressed();
+      boolean jump = client.options.jumpKey.isPressed();
+
+      drawKey(context, tr, accent, x0 + keySize + gap, y0, keySize, "W", fwd);
+      drawKey(context, tr, accent, x0, y0 + keySize + gap, keySize, "A", left);
+      drawKey(context, tr, accent, x0 + keySize + gap, y0 + keySize + gap, keySize, "S", back);
+      drawKey(context, tr, accent, x0 + (keySize + gap) * 2, y0 + keySize + gap, keySize, "D", right);
+
+      int rowY = y0 + (keySize + gap) * 2;
+      drawKey(context, tr, accent, x0, rowY, wideW, keySize, "LMB", attack);
+      drawKey(context, tr, accent, x0 + wideW + gap, rowY, wideW, keySize, "RMB", use);
+
+      if (jump) {
+         // Subtle accent underline when jumping (space bar) — keeps grid compact.
+         int barW = gridW;
+         int barH = 2;
+         int barY = rowY + keySize + gap;
+         int barColor = 0xFF000000 | (accent.textColor & 0xFFFFFF);
+         RoundedRectRenderer.draw(context, x0, barY, barW, barH, 1, barColor);
+      }
+   }
+
+   private static void drawKey(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int x, int y, int size, String label, boolean held) {
+      drawKey(context, tr, accent, x, y, size, size, label, held);
+   }
+
+   private static void drawKey(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int x, int y, int w, int h, String label, boolean held) {
+      int bg = held ? (0xFF000000 | (accent.textColor & 0xFFFFFF)) : 0xC01A0A0F;
+      int fg = held ? 0xFF1A0A0F : 0xFFFFFFFF;
+      RoundedRectRenderer.draw(context, x, y, w, h, 3, bg);
+      int textW = tr.getWidth(label);
+      int textX = x + (w - textW) / 2;
+      int textY = y + (h - tr.fontHeight) / 2 + 1;
+      context.drawText(tr, label, textX, textY, fg, false);
    }
 
    private static float autoEventAnim = 0.0F;

@@ -9,7 +9,9 @@
     "TitleScreenMixin",
     "MotionBlurMixin",
     "WeatherRenderingMixin",
-    "HurtCamMixin"
+    "HurtCamMixin",
+    "FovMixin",
+    "CrosshairMixin"
   ],
   "injectors": {
     "defaultRequire": 1

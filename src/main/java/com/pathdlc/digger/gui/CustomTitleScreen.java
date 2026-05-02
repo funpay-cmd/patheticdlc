@@ -15,6 +15,7 @@ import net.minecraft.client.gui.screen.world.SelectWorldScreen;
 
 public class CustomTitleScreen extends Screen {
    private static final Identifier BACKGROUND = Identifier.of("pathdlc_digger", "textures/gui/background.png");
+   private static final Identifier BACKGROUND_FEVER = Identifier.of("pathdlc_digger", "fever_assets/image/mainmenu/background.png");
    private static final int BTN_WIDTH = 220;
    private static final int BTN_HEIGHT = 28;
    private static final int BTN_GAP = 6;
@@ -82,8 +83,21 @@ public class CustomTitleScreen extends Screen {
 
    private void renderBackground(DrawContext context) {
       context.fill(0, 0, this.width, this.height, -16382448);
-      context.drawTexture(RenderLayer::getGuiTextured, BACKGROUND, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
+      Identifier bg = pickBackground();
+      context.drawTexture(RenderLayer::getGuiTextured, bg, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
       context.fill(0, 0, this.width, this.height, -1442445808);
+   }
+
+   private static Identifier pickBackground() {
+      com.pathdlc.digger.gui.Module m = com.pathdlc.digger.gui.ModuleManager.get("MenuStyle");
+      if (m == null) {
+         return BACKGROUND;
+      }
+      com.pathdlc.digger.gui.ModuleSetting s = m.getSetting("Background");
+      if (s == null || s.getChoiceValue() == null) {
+         return BACKGROUND;
+      }
+      return "Fever".equalsIgnoreCase(s.getChoiceValue()) ? BACKGROUND_FEVER : BACKGROUND;
    }
 
    private void updateParticles() {
