@@ -139,10 +139,11 @@ public final class HudRenderer {
       }
       events.sort(Comparator.comparingLong(e -> e.startEpochMs <= 0L ? Long.MAX_VALUE : e.startEpochMs));
 
-      int rowH = tr.fontHeight + PAD_Y * 2;
-      int padding = 10;
-      int headerH = tr.fontHeight + PAD_Y * 2;
-      int totalH = headerH + events.size() * rowH + padding;
+      // Compact layout: one row per event, no header/divider, tight padding.
+      int compactPadX = 6;
+      int compactPadY = 3;
+      int rowH = tr.fontHeight + compactPadY * 2;
+      int totalH = events.size() * rowH + (events.size() - 1);
 
       int maxRowW = 0;
       String[][] cells = new String[events.size()][3];
@@ -152,36 +153,34 @@ public final class HudRenderer {
          cells[i][0] = e.name;
          cells[i][1] = dist >= 0.0 ? String.format("%dm", (int) Math.round(dist)) : "--";
          cells[i][2] = AutoEventBot.formatCountdown(e);
-         int w = tr.getWidth(plainText(cells[i][0])) + tr.getWidth(monoText(cells[i][1])) + tr.getWidth(monoText(cells[i][2])) + 60;
+         int w = tr.getWidth(plainText(cells[i][0]))
+               + tr.getWidth(monoText(cells[i][1]))
+               + tr.getWidth(monoText(cells[i][2]))
+               + 24;
          if (w > maxRowW) {
             maxRowW = w;
          }
       }
-      int headerLabelW = tr.getWidth(titleText("Events"));
-      int rowW = Math.max(maxRowW, headerLabelW + 32);
+      int rowW = maxRowW + compactPadX * 2;
       int x = sw / 2 - rowW / 2;
-      int y = MARGIN + 4;
+      int y = MARGIN;
 
-      RoundedRectRenderer.draw(context, x, y, rowW, totalH, 6, 0xCC1A0A0F);
-
-      int textY = y + PAD_Y;
-      context.drawText(tr, titleText("Events"), x + PAD_X, textY, 0xFFFFFFFF, true);
-      context.fill(x + 4, y + headerH, x + rowW - 4, y + headerH + 1, 0x40FFFFFF);
-
-      int rowY = y + headerH + 2;
+      int rowY = y;
       for (int i = 0; i < events.size(); i++) {
+         RoundedRectRenderer.draw(context, x, rowY, rowW, rowH, 4, 0xCC1A0A0F);
+
          Text name = plainText(cells[i][0]);
          Text dist = monoText(cells[i][1]);
          Text countdown = monoText(cells[i][2]);
          int distW = tr.getWidth(dist);
          int cdW = tr.getWidth(countdown);
          int rowTextY = rowY + rowH / 2 - tr.fontHeight / 2;
-         context.drawText(tr, name, x + PAD_X, rowTextY, 0xFFFFFFFF, true);
-         int countdownX = x + rowW - PAD_X - cdW;
-         int distX = countdownX - 12 - distW;
+         context.drawText(tr, name, x + compactPadX, rowTextY, 0xFFFFFFFF, true);
+         int countdownX = x + rowW - compactPadX - cdW;
+         int distX = countdownX - 8 - distW;
          context.drawText(tr, dist, distX, rowTextY, 0xFFAAAAAA, true);
          context.drawText(tr, countdown, countdownX, rowTextY, accent.textColor, true);
-         rowY += rowH;
+         rowY += rowH + 1;
       }
    }
 
