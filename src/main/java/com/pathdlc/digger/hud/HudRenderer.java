@@ -272,16 +272,18 @@ public final class HudRenderer {
          return;
       }
 
-      enabled.sort(Comparator.comparingInt((Module m) -> tr.getWidth(styledText(m.getName()))).reversed());
+      enabled.sort(Comparator.comparingInt((Module m) -> measureWidth(tr, m.getName())).reversed());
 
       int rowH = tr.fontHeight + PAD_Y * 2;
       int y = MARGIN;
+      int rightEdge = screenW - MARGIN;
 
       for (Module m : enabled) {
-         Text label = styledText(m.getName());
-         int textW = tr.getWidth(label);
-         int rowW = textW + PAD_X * 2;
-         int x = screenW - rowW - MARGIN;
+         String labelText = m.getName();
+         Text label = styledText(labelText);
+         int textW = measureWidth(tr, labelText);
+         int rowW = textW + PAD_X * 2 + 4;
+         int x = rightEdge - rowW;
 
          RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
 
@@ -291,6 +293,15 @@ public final class HudRenderer {
 
          y += rowH + 1;
       }
+   }
+
+   private static int measureWidth(TextRenderer tr, String labelText) {
+      int styled = tr.getWidth(styledText(labelText));
+      int plain = tr.getWidth(Text.literal(labelText));
+      // Inter-rendered widths from getWidth can occasionally underreport vs the
+      // actual rasterised glyphs due to TTF oversample. Pick the larger so the
+      // background panel always contains the text.
+      return Math.max(styled, plain);
    }
 
    private static void renderTargetHud(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw, int sh, MinecraftClient client) {

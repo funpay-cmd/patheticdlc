@@ -6,6 +6,7 @@ import com.pathdlc.digger.clan.ClanCommandHandler;
 import com.pathdlc.digger.clan.ClanRedstoneBot;
 import com.pathdlc.digger.command.DotCommandHandler;
 import com.pathdlc.digger.event.AutoEventBot;
+import com.pathdlc.digger.event.EventBeaconRenderer;
 import com.pathdlc.digger.farm.FarmCommandHandler;
 import com.pathdlc.digger.farm.FarmManager;
 import com.pathdlc.digger.gui.ClickGuiScreen;
@@ -88,6 +89,8 @@ public class PathDlcDiggerClient implements ClientModInitializer {
          if (ModuleManager.isEnabled("BlockESP")) {
             BlockESPRenderer.render(context);
          }
+
+         EventBeaconRenderer.render(context);
       });
       HudRenderCallback.EVENT.register((HudRenderCallback)(context, tickCounter) -> {
          if (HitEffectsRenderer.hasActiveEffects()) {

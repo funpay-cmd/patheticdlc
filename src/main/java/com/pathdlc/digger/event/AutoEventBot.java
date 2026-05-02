@@ -85,6 +85,10 @@ public final class AutoEventBot {
       "compass", "компас", "уровень", "сервер", "system", "info", "anti-x-ray",
       "анархия", "warevisuals"
    );
+   private static final Pattern PLACEHOLDER_NAME = Pattern.compile(
+      "(?i)(?:до\\s+следующ|следующ\\w*\\s+ивент|next\\s+event|нет\\s+активн|no\\s+active|неизвестн|unknown|none)",
+      Pattern.UNICODE_CHARACTER_CLASS
+   );
    private static final Pattern TIMER_RU = Pattern.compile(
       "(?i)(\\d{1,3})\\s*мин(?:ут)?[ауы]?\\s*(?:(\\d{1,2})\\s*сек(?:унд)?[ауы]?)?"
    );
@@ -366,6 +370,12 @@ public final class AutoEventBot {
 
    private static void registerEvent(String name, int x, int y, int z, long startMs) {
       if (Math.abs(x) > 30_000_000 || Math.abs(z) > 30_000_000 || y < -64 || y > 320) {
+         return;
+      }
+      // Skip placeholder rows like "До следующего ивента" — those are status
+      // banners about *when* the next event will start, not a real event we
+      // can pin a beacon on.
+      if (name != null && PLACEHOLDER_NAME.matcher(name).find()) {
          return;
       }
       String key = name == null || name.isBlank() ? "Event@" + x + "_" + z : name;
