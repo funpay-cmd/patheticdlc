@@ -4,7 +4,9 @@ import com.pathdlc.digger.gui.GuiSettings;
 import com.pathdlc.digger.gui.Module;
 import com.pathdlc.digger.gui.ModuleManager;
 import com.pathdlc.digger.gui.ModuleSetting;
+import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.RoundedRectRenderer;
+import com.pathdlc.digger.render.StyledTextCache;
 import java.lang.reflect.Field;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -45,8 +47,16 @@ public final class HudRenderer {
    private static final int LOGO_TEXT_GAP = 6;
    private static final int STRIPE_W = 2;
 
+   private static final int MUSIC_REFRESH_FRAMES = 20;
+   private static final int PING_REFRESH_FRAMES = 20;
+   private static final int TARGET_AVATAR_SIZE = 24;
+
    private static Field musicCurrentField;
    private static boolean musicReflectionFailed = false;
+   private static String cachedMusicLabel;
+   private static long lastMusicLookup = -1L;
+   private static int cachedPing = -1;
+   private static long lastPingLookup = -1L;
 
    private HudRenderer() {
    }
@@ -129,7 +139,7 @@ public final class HudRenderer {
       int rowH = Math.max(LOGO_SIZE, tr.fontHeight) + PAD_Y * 2;
       int rowW = PAD_X * 2 + LOGO_SIZE + LOGO_TEXT_GAP + textW;
 
-      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 4, 0xC0080808);
+      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 4, 0xC01A0A0F);
       RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int logoY = y + rowH / 2 - LOGO_SIZE / 2;
@@ -159,7 +169,7 @@ public final class HudRenderer {
       int rowH = tr.fontHeight + PAD_Y * 2;
       int rowW = textW + PAD_X * 2;
 
-      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC0080808);
+      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
       RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int textX = x + PAD_X;
@@ -175,7 +185,7 @@ public final class HudRenderer {
       int rowW = textW + PAD_X * 2;
       int x = rightX - rowW;
 
-      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC0080808);
+      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
       RoundedRectRenderer.draw(context, x + rowW - STRIPE_W, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int textX = x + PAD_X;
@@ -204,8 +214,9 @@ public final class HudRenderer {
          int rowW = textW + PAD_X * 2 + STRIPE_W;
          int x = screenW - rowW - MARGIN;
 
-         RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC0080808);
+         RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
          int stripeColor = 0xFF000000 | (accent.textColor & 0xFFFFFF);
+         RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, stripeColor);
          RoundedRectRenderer.draw(context, x + rowW - STRIPE_W, y, STRIPE_W, rowH, 1, stripeColor);
 
          int textX = x + PAD_X;
@@ -227,18 +238,18 @@ public final class HudRenderer {
       float maxHealth = Math.max(1.0F, target.getMaxHealth());
       float distance = client.player.distanceTo(target);
 
-      int logoSize = LOGO_SIZE;
+      int logoSize = TARGET_AVATAR_SIZE;
       Text nameLabel = styledText(name);
       Text statsLabel = styledText(String.format("%.1f / %.1f HP   %.1fm", health, maxHealth, distance));
       int nameW = tr.getWidth(nameLabel);
       int statsW = tr.getWidth(statsLabel);
       int textBlockW = Math.max(nameW, statsW);
       int rowW = PAD_X * 2 + logoSize + LOGO_TEXT_GAP + textBlockW;
-      int rowH = PAD_Y * 2 + tr.fontHeight * 2 + 4 + 6;
+      int rowH = Math.max(logoSize + PAD_Y * 2 + 6, PAD_Y * 2 + tr.fontHeight * 2 + 4 + 6);
       int x = sw / 2 - rowW / 2;
       int y = sh - rowH - 60;
 
-      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 5, 0xCC080808);
+      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 5, 0xCC1A0A0F);
       RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int avatarSize = logoSize;
@@ -333,21 +344,34 @@ public final class HudRenderer {
    }
 
    private static int currentPing(MinecraftClient client) {
+      long frame = PerformanceSettings.getFrameCounter();
+      if (lastPingLookup >= 0L && frame - lastPingLookup < PING_REFRESH_FRAMES) {
+         return cachedPing;
+      }
+      lastPingLookup = frame;
       ClientPlayNetworkHandler net = client.getNetworkHandler();
       if (net == null || client.player == null) {
+         cachedPing = -1;
          return -1;
       }
       PlayerListEntry entry = net.getPlayerListEntry(client.player.getUuid());
-      return entry != null ? entry.getLatency() : -1;
+      cachedPing = entry != null ? entry.getLatency() : -1;
+      return cachedPing;
    }
 
    private static String currentMusicLabel(MinecraftClient client) {
       if (musicReflectionFailed) {
          return null;
       }
+      long frame = PerformanceSettings.getFrameCounter();
+      if (lastMusicLookup >= 0L && frame - lastMusicLookup < MUSIC_REFRESH_FRAMES) {
+         return cachedMusicLabel;
+      }
+      lastMusicLookup = frame;
       try {
          MusicTracker tracker = client.getMusicTracker();
          if (tracker == null) {
+            cachedMusicLabel = null;
             return null;
          }
          if (musicCurrentField == null) {
@@ -360,22 +384,26 @@ public final class HudRenderer {
             }
             if (musicCurrentField == null) {
                musicReflectionFailed = true;
+               cachedMusicLabel = null;
                return null;
             }
          }
          Object current = musicCurrentField.get(tracker);
          if (current == null) {
+            cachedMusicLabel = null;
             return null;
          }
          SoundInstance instance = (SoundInstance)current;
          Identifier id = instance.getId();
          if (id == null) {
+            cachedMusicLabel = null;
             return null;
          }
-         String path = id.getPath();
-         return prettifyTrack(path);
+         cachedMusicLabel = prettifyTrack(id.getPath());
+         return cachedMusicLabel;
       } catch (Throwable t) {
          musicReflectionFailed = true;
+         cachedMusicLabel = null;
          return null;
       }
    }
@@ -407,8 +435,6 @@ public final class HudRenderer {
    }
 
    private static Text styledText(String s) {
-      return GuiSettings.isCustomFontEnabled()
-         ? Text.literal(s).styled(style -> style.withFont(CUSTOM_FONT))
-         : Text.literal(s);
+      return StyledTextCache.get(s, CUSTOM_FONT);
    }
 }

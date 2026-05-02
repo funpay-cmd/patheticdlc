@@ -3,6 +3,7 @@ package com.pathdlc.digger.gui;
 import com.pathdlc.digger.render.LiquidGlassRenderer;
 import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.RoundedRectRenderer;
+import com.pathdlc.digger.gui.GuiSettings;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -98,6 +99,7 @@ public class CustomTitleScreen extends Screen {
 
    private void renderParticles(DrawContext context) {
       int maxParticles = Math.min(40, PerformanceSettings.getParticleCount());
+      int rgb = GuiSettings.getAccentColor().textColor & 0xFFFFFF;
 
       for (int i = 0; i < maxParticles; i++) {
          int x = (int)this.px[i];
@@ -105,7 +107,7 @@ public class CustomTitleScreen extends Screen {
          int s = Math.max(1, (int)this.psz[i]);
          int a = (int)(this.pa[i] * 255.0F * this.openProgress);
          if (a >= 1) {
-            RoundedRectRenderer.draw(context, x, y, s * 2, s * 2, s, a << 24 | 10075135);
+            RoundedRectRenderer.draw(context, x, y, s * 2, s * 2, s, a << 24 | rgb);
          }
       }
    }
@@ -121,10 +123,11 @@ public class CustomTitleScreen extends Screen {
          int glassH = 30;
          int glassX = this.width / 2 - glassW / 2;
          int glassY = titleY - 6;
+         GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
          if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
-            LiquidGlassRenderer.drawGlassPanel(context, (float)glassX, (float)glassY, (float)glassW, (float)glassH, 15.0F, 0.0F, 0.12F, 0.3F, 0.6F, 1.0F);
+            LiquidGlassRenderer.drawGlassPanel(context, (float)glassX, (float)glassY, (float)glassW, (float)glassH, 15.0F, 0.0F, 0.12F, accent.r, accent.g, accent.b);
          } else {
-            RoundedRectRenderer.draw(context, glassX, glassY, glassW, glassH, 15, -2012211152);
+            RoundedRectRenderer.draw(context, glassX, glassY, glassW, glassH, 15, 0x88180A0F);
          }
 
          int titleA = (int)(titleProgress * 255.0F);
@@ -159,18 +162,20 @@ public class CustomTitleScreen extends Screen {
             float hTarget = hovered ? 1.0F : 0.0F;
             this.btnHover[i] = this.btnHover[i] + (hTarget - this.btnHover[i]) * 0.15F;
             int drawX = cx + offsetX;
+            GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
+            int accentRgb = accent.textColor & 0xFFFFFF;
             if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
                LiquidGlassRenderer.drawGlassPanel(
-                  context, (float)drawX, (float)btnY, 220.0F, 28.0F, 14.0F, this.btnHover[i], 0.05F + this.btnHover[i] * 0.1F, 0.3F, 0.6F, 1.0F
+                  context, (float)drawX, (float)btnY, 220.0F, 28.0F, 14.0F, this.btnHover[i], 0.05F + this.btnHover[i] * 0.1F, accent.r, accent.g, accent.b
                );
             } else {
                int bgA = (int)(alphaF * (160.0F + 40.0F * this.btnHover[i]));
-               RoundedRectRenderer.draw(context, drawX, btnY, 220, 28, 14, bgA << 24 | 1054768);
+               RoundedRectRenderer.draw(context, drawX, btnY, 220, 28, 14, bgA << 24 | 0x180A0F);
             }
 
             if (this.btnHover[i] > 0.01F) {
                int glowA = (int)(this.btnHover[i] * 25.0F * alphaF);
-               RoundedRectRenderer.draw(context, drawX + 2, btnY + 2, 216, 24, 12, glowA << 24 | 4491468);
+               RoundedRectRenderer.draw(context, drawX + 2, btnY + 2, 216, 24, 12, glowA << 24 | accentRgb);
             }
 
             int textA = (int)(alphaF * 255.0F);
@@ -181,7 +186,7 @@ public class CustomTitleScreen extends Screen {
                int lineA = (int)(this.btnHover[i] * 100.0F * alphaF);
                int lineW = (int)(192.0F * this.btnHover[i]);
                int lineX = drawX + 110 - lineW / 2;
-               RoundedRectRenderer.draw(context, lineX, btnY + 28 - 3, lineW, 2, 1, lineA << 24 | 6724061);
+               RoundedRectRenderer.draw(context, lineX, btnY + 28 - 3, lineW, 2, 1, lineA << 24 | accentRgb);
             }
          }
       }

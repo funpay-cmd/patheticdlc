@@ -575,7 +575,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)sidebarX, (float)sidebarY, (float)DOGEN_SIDEBAR_W, (float)sidebarH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, sidebarX, sidebarY, DOGEN_SIDEBAR_W, sidebarH, 8, -871230694);
+         RoundedRectRenderer.draw(context, sidebarX, sidebarY, DOGEN_SIDEBAR_W, sidebarH, 8, 0xCC1A0A0F);
       }
 
       int catH = Math.max(DOGEN_CAT_H, (sidebarH - 8) / Math.max(1, this.categories.size()));
@@ -610,7 +610,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)hx, (float)hy, (float)hw, (float)DOGEN_HEADER_H, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, hx, hy, hw, DOGEN_HEADER_H, 8, -871230694);
+         RoundedRectRenderer.draw(context, hx, hy, hw, DOGEN_HEADER_H, 8, 0xCC1A0A0F);
       }
 
       Category selectedCat = this.categories.get(this.dogenSelectedCategory);
@@ -652,7 +652,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)mainX, (float)mainY, (float)mainW, (float)mainH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, mainX, mainY, mainW, mainH, 8, -871230694);
+         RoundedRectRenderer.draw(context, mainX, mainY, mainW, mainH, 8, 0xCC1A0A0F);
       }
 
       int scroll = this.scrollOffsets.getOrDefault("dogen:" + selectedCat.getName(), 0);
@@ -757,7 +757,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)cx, (float)cy, 130.0F, (float)colH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, cx, cy, 130, colH, 8, -871230694);
+         RoundedRectRenderer.draw(context, cx, cy, 130, colH, 8, 0xCC1A0A0F);
       }
 
       RoundedRectRenderer.draw(context, cx, cy, 130, 26, 8, 8, 0, 0, (int)(85.0F * alpha) << 24 | accent.textColor & 16777215);
@@ -782,6 +782,7 @@ public class ClickGuiScreen extends Screen {
          btn.updateHover(hovered);
          if (mod.isEnabled()) {
             RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, (int)(68.0F * alpha) << 24 | accent.textColor & 16777215);
+            RoundedRectRenderer.draw(context, cx + 3, y + 1, 2, 16, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
          } else if (btn.hoverAmount > 0.01F) {
             int hAlpha = (int)(btn.hoverAmount * 32.0F * alpha);
             RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, hAlpha << 24 | 16777215);
@@ -878,9 +879,7 @@ public class ClickGuiScreen extends Screen {
    }
 
    private Text styledText(String text) {
-      return GuiSettings.isCustomFontEnabled()
-         ? Text.literal(text).styled(style -> style.withFont(CUSTOM_FONT))
-         : Text.literal(text);
+      return com.pathdlc.digger.render.StyledTextCache.get(text, CUSTOM_FONT);
    }
 
    private void drawStyledText(DrawContext context, String text, int x, int y, int color) {
@@ -1171,7 +1170,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)x, (float)y, (float)w, (float)h, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, x, y, w, h, 8, -871230694);
+         RoundedRectRenderer.draw(context, x, y, w, h, 8, 0xCC1A0A0F);
       }
    }
 
@@ -1305,7 +1304,7 @@ public class ClickGuiScreen extends Screen {
          rowY += rowH;
          if (mod.isSettingsExpanded() && mod.hasSettings()) {
             for (ModuleSetting setting : mod.getSettings()) {
-               this.renderSetting(context, setting, contentX + 4, rowY, mouseX, mouseY, accent, alpha, contentY + 2, contentH - 4);
+               this.renderDogenSetting(context, setting, contentX, rowY, contentW, mouseX, mouseY, accent, alpha);
                rowY += 16;
             }
             rowY += 4;
@@ -1378,7 +1377,7 @@ public class ClickGuiScreen extends Screen {
          if (mod.isSettingsExpanded() && mod.hasSettings()) {
             for (ModuleSetting setting : mod.getSettings()) {
                if (mouseY >= rowY && mouseY < rowY + 16) {
-                  this.handleSettingClick(setting, contentX + 4, rowY, mouseX);
+                  this.handleDogenSettingClick(setting, contentX, contentW, rowY, mouseX);
                   return true;
                }
                rowY += 16;
@@ -1462,8 +1461,13 @@ public class ClickGuiScreen extends Screen {
 
       int contentTop = sy + COMPACT_HEADER_H + 4;
       int contentBottom = sy + h - 4;
+      int viewportH = contentBottom - contentTop;
+      int totalH = this.compactTotalContentH();
+      int maxScroll = Math.max(0, totalH - viewportH);
+      int scroll = Math.max(0, Math.min(maxScroll, this.scrollOffsets.getOrDefault("compact:scroll", 0)));
+      this.scrollOffsets.put("compact:scroll", scroll);
       context.enableScissor(sx + 2, contentTop, sx + w - 2, contentBottom);
-      int y = contentTop;
+      int y = contentTop - scroll;
       for (int i = 0; i < this.categories.size(); i++) {
          Category cat = this.categories.get(i);
          boolean expanded = Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()));
@@ -1506,7 +1510,7 @@ public class ClickGuiScreen extends Screen {
                y += rowH;
                if (mod.isSettingsExpanded() && mod.hasSettings()) {
                   for (ModuleSetting setting : mod.getSettings()) {
-                     this.renderSetting(context, setting, sx + 8, y, mouseX, mouseY, accent, alpha, contentTop, contentBottom - contentTop);
+                     this.renderDogenSetting(context, setting, sx, y, w, mouseX, mouseY, accent, alpha);
                      y += 16;
                   }
                   y += 4;
@@ -1527,7 +1531,8 @@ public class ClickGuiScreen extends Screen {
       if (mouseY < contentTop || mouseY > contentBottom || mouseX < sx + 6 || mouseX > sx + w - 6) {
          return super.mouseClicked(mouseX, mouseY, button);
       }
-      int y = contentTop;
+      int scroll = this.scrollOffsets.getOrDefault("compact:scroll", 0);
+      int y = contentTop - scroll;
       for (int i = 0; i < this.categories.size(); i++) {
          Category cat = this.categories.get(i);
          boolean expanded = Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()));
@@ -1556,7 +1561,7 @@ public class ClickGuiScreen extends Screen {
                if (mod.isSettingsExpanded() && mod.hasSettings()) {
                   for (ModuleSetting setting : mod.getSettings()) {
                      if (mouseY >= y && mouseY < y + 16) {
-                        this.handleSettingClick(setting, sx + 8, y, mouseX);
+                        this.handleDogenSettingClick(setting, sx, w, y, mouseX);
                         return true;
                      }
                      y += 16;
@@ -1570,7 +1575,21 @@ public class ClickGuiScreen extends Screen {
    }
 
    private boolean mouseScrolledCompact(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-      return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      int sx = this.compactStartX();
+      int sy = this.compactStartY();
+      int w = COMPACT_PANEL_W;
+      int h = this.compactPanelH();
+      if (mouseX < sx || mouseX > sx + w || mouseY < sy || mouseY > sy + h) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      int viewportH = h - COMPACT_HEADER_H - 8;
+      int totalH = this.compactTotalContentH();
+      int maxScroll = Math.max(0, totalH - viewportH);
+      int scroll = this.scrollOffsets.getOrDefault("compact:scroll", 0);
+      scroll -= (int)(verticalAmount * 12.0);
+      scroll = Math.max(0, Math.min(maxScroll, scroll));
+      this.scrollOffsets.put("compact:scroll", scroll);
+      return true;
    }
 
    private int cardsRows() {
@@ -1690,7 +1709,7 @@ public class ClickGuiScreen extends Screen {
             rowY += rowH;
             if (mod.isSettingsExpanded() && mod.hasSettings()) {
                for (ModuleSetting setting : mod.getSettings()) {
-                  this.renderSetting(context, setting, ox + 4, rowY, mouseX, mouseY, accent, alpha, listTop, listBottom - listTop);
+                  this.renderDogenSetting(context, setting, ox, rowY, ow, mouseX, mouseY, accent, alpha);
                   rowY += 16;
                }
                rowY += 4;
@@ -1748,7 +1767,7 @@ public class ClickGuiScreen extends Screen {
             if (mod.isSettingsExpanded() && mod.hasSettings()) {
                for (ModuleSetting setting : mod.getSettings()) {
                   if (mouseY >= rowY && mouseY < rowY + 16) {
-                     this.handleSettingClick(setting, ox + 4, rowY, mouseX);
+                     this.handleDogenSettingClick(setting, ox, ow, rowY, mouseX);
                      return true;
                   }
                   rowY += 16;

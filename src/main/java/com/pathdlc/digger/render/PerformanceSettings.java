@@ -1,12 +1,21 @@
 package com.pathdlc.digger.render;
 
+/**
+ * Visual settings are no longer downgraded automatically. Glass blur, rounded
+ * shaders and particle counts always run at the highest tier so the UI
+ * looks the same regardless of frame rate. Frame timing is still tracked so
+ * that consumers can throttle background work (text-width caching, music
+ * reflection, etc.) without ever touching the rendered output.
+ */
 public final class PerformanceSettings {
-   private static PerformanceSettings.Quality quality = PerformanceSettings.Quality.HIGH;
-   private static PerformanceSettings.Quality userOverride = null;
+   private static final Quality QUALITY = Quality.HIGH;
+   private static final int BLUR_ITERATIONS = 3;
+   private static final float BLUR_SPREAD = 2.5F;
+   private static final int PARTICLE_COUNT = 40;
+
    private static long lastFrameTime = System.nanoTime();
    private static float smoothFps = 60.0F;
-   private static int frameCount = 0;
-   private static long fpsAccum = 0L;
+   private static long frameCounter = 0L;
 
    private PerformanceSettings() {
    }
@@ -18,98 +27,58 @@ public final class PerformanceSettings {
       if (delta > 0L) {
          float instantFps = 1.0E9F / (float)delta;
          smoothFps = smoothFps + (instantFps - smoothFps) * 0.05F;
-         frameCount++;
-         if (frameCount >= 60) {
-            if (userOverride != null) {
-               quality = userOverride;
-            } else if (smoothFps < 25.0F) {
-               quality = PerformanceSettings.Quality.LOW;
-            } else if (smoothFps < 45.0F) {
-               quality = PerformanceSettings.Quality.MEDIUM;
-            } else {
-               quality = PerformanceSettings.Quality.HIGH;
-            }
-
-            frameCount = 0;
-         }
       }
+      frameCounter++;
    }
 
-   public static PerformanceSettings.Quality getQuality() {
-      return quality;
+   public static long getFrameCounter() {
+      return frameCounter;
+   }
+
+   public static Quality getQuality() {
+      return QUALITY;
    }
 
    public static float getSmoothFps() {
       return smoothFps;
    }
 
-   public static void setUserOverride(PerformanceSettings.Quality q) {
-      userOverride = q;
-      if (q != null) {
-         quality = q;
-      }
+   public static void setUserOverride(Quality q) {
    }
 
-   public static PerformanceSettings.Quality getUserOverride() {
-      return userOverride;
+   public static Quality getUserOverride() {
+      return null;
    }
 
    public static void cycleQuality() {
-      if (userOverride == null) {
-         userOverride = PerformanceSettings.Quality.HIGH;
-      } else {
-         userOverride = switch (userOverride) {
-            case LOW -> null;
-            case MEDIUM -> PerformanceSettings.Quality.LOW;
-            case HIGH -> PerformanceSettings.Quality.MEDIUM;
-         };
-      }
-
-      if (userOverride != null) {
-         quality = userOverride;
-      }
    }
 
    public static String getQualityLabel() {
-      return userOverride == null
-         ? "Auto (" + quality.name().charAt(0) + quality.name().substring(1).toLowerCase() + ")"
-         : quality.name().charAt(0) + quality.name().substring(1).toLowerCase();
+      return "High";
    }
 
    public static int getBlurIterations() {
-      return switch (quality) {
-         case LOW -> 0;
-         case MEDIUM -> 1;
-         case HIGH -> 3;
-      };
+      return BLUR_ITERATIONS;
    }
 
    public static boolean useShaders() {
-      return quality != PerformanceSettings.Quality.LOW;
+      return true;
    }
 
    public static boolean useGlassEffect() {
-      return quality == PerformanceSettings.Quality.HIGH;
+      return true;
    }
 
    public static boolean useRoundedShader() {
-      return quality != PerformanceSettings.Quality.LOW;
+      return true;
    }
 
    public static int getParticleCount() {
-      return switch (quality) {
-         case LOW -> 0;
-         case MEDIUM -> 15;
-         case HIGH -> 40;
-      };
+      return PARTICLE_COUNT;
    }
 
    public static float getBlurSpread() {
-      return switch (quality) {
-         case LOW -> 0.0F;
-         case MEDIUM -> 2.0F;
-         case HIGH -> 2.5F;
-      };
+      return BLUR_SPREAD;
    }
 
    public static enum Quality {
