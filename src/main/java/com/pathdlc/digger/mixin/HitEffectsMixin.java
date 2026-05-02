@@ -2,6 +2,7 @@ package com.pathdlc.digger.mixin;
 
 import com.pathdlc.digger.gui.ModuleManager;
 import com.pathdlc.digger.render.HitEffectsRenderer;
+import com.pathdlc.digger.visual.VisualEffectsHook;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.client.MinecraftClient;
@@ -24,5 +25,6 @@ public abstract class HitEffectsMixin {
          int screenH = mc.getWindow().getScaledHeight();
          HitEffectsRenderer.spawnAt((double)screenW / 2.0, (double)screenH / 2.0);
       }
+      VisualEffectsHook.onAttackEntity(target);
    }
 }

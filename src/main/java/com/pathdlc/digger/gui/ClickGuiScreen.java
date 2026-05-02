@@ -110,12 +110,36 @@ public class ClickGuiScreen extends Screen {
          autoReconnect.addSetting(ModuleSetting.slider("Delay", 5.0F, 1.0F, 30.0F, 1.0F));
          Module blockEsp = new Module("BlockESP");
          Module blockOverlay = new Module("BlockOverlay");
+
+         String[] particleChoices = new String[]{"Hearts", "Sparks", "Crit", "Magic", "Soul", "Flame", "Cloud"};
+         Module hitParticles = new Module("HitParticles");
+         hitParticles.addSetting(ModuleSetting.choice("Type", particleChoices, 0));
+         Module hitSound = new Module("HitSound");
+         hitSound.addSetting(ModuleSetting.choice("Sound", new String[]{"BitClick", "Bell", "Snap", "Wood", "Anvil"}, 0));
+         hitSound.addSetting(ModuleSetting.slider("Volume", 0.6F, 0.0F, 1.0F, 0.05F));
+         hitSound.addSetting(ModuleSetting.slider("Pitch", 1.0F, 0.5F, 2.0F, 0.1F));
+         Module customFog = new Module("CustomFog");
+         customFog.addSetting(ModuleSetting.choice("Color", new String[]{"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink", "White"}, 0));
+         customFog.addSetting(ModuleSetting.slider("Density", 0.5F, 0.0F, 0.95F, 0.05F));
+         Module jumpCircle = new Module("JumpCircle");
+         jumpCircle.addSetting(ModuleSetting.choice("Type", particleChoices, 1));
+         Module targetEffect = new Module("TargetEffect");
+         targetEffect.addSetting(ModuleSetting.choice("Type", particleChoices, 0));
+         Module chinaHat = new Module("ChinaHat");
+         chinaHat.addSetting(ModuleSetting.choice("Type", particleChoices, 1));
+
          Category world = new Category("World", 0.0F, 0.0F);
          world.addModule(fullBright);
          world.addModule(timeChanger);
          world.addModule(noWeather);
          world.addModule(noFog);
          world.addModule(noHurtCam);
+         world.addModule(customFog);
+         world.addModule(hitParticles);
+         world.addModule(hitSound);
+         world.addModule(jumpCircle);
+         world.addModule(targetEffect);
+         world.addModule(chinaHat);
          world.addModule(autoRespawn);
          world.addModule(autoReconnect);
          world.addModule(blockEsp);

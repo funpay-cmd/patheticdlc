@@ -91,7 +91,7 @@ public final class HudRenderer {
       if (widgetEnabled("Music", true)) {
          String track = currentMusicLabel(client);
          if (track != null) {
-            topLeftY = renderInfoRow(context, tr, accent, MARGIN, topLeftY, "\u266A " + track);
+            topLeftY = renderMusicCard(context, tr, accent, MARGIN, topLeftY, track);
          }
       }
 
@@ -260,6 +260,94 @@ public final class HudRenderer {
       int textY = y + rowH / 2 - tr.fontHeight / 2;
       context.drawText(tr, label, textX, textY, 0xFFFFFFFF, true);
       return y + rowH + LINE_GAP;
+   }
+
+   /**
+    * Spotify-style music card: dark rounded panel with an album-art tile on
+    * the left, title above artist on the right, decorative heart in the
+    * upper-right and a thin progress bar at the bottom.  Position/duration
+    * is not actually queried (SystemMediaTracker only exposes the title and
+    * artist text reliably across platforms), so the progress bar is purely
+    * a visual flourish that scrubs slowly as a heartbeat for the widget.
+    */
+   private static int renderMusicCard(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int x, int y, String track) {
+      int cardW = 184;
+      int cardH = 56;
+      int padX = 6;
+      int padY = 6;
+      int tile = cardH - padY * 2;
+      int gap = 8;
+
+      String artist;
+      String title;
+      int sep = track.indexOf(" - ");
+      if (sep > 0 && sep + 3 < track.length()) {
+         artist = track.substring(0, sep).trim();
+         title = track.substring(sep + 3).trim();
+      } else {
+         artist = "";
+         title = track.trim();
+      }
+
+      int textX = x + padX + tile + gap;
+      int rightInner = x + cardW - padX;
+      int textWidthBudget = rightInner - textX - 14;
+
+      Text titleLabel = titleText(truncateForWidth(tr, title, textWidthBudget, true));
+      Text artistLabel = plainText(truncateForWidth(tr, artist.isEmpty() ? "Now Playing" : artist, textWidthBudget, false));
+
+      RoundedRectRenderer.draw(context, x, y, cardW, cardH, 6, 0xE6120A0E);
+      int tileX = x + padX;
+      int tileY = y + padY;
+      RoundedRectRenderer.draw(context, tileX, tileY, tile, tile, 4, 0xFF2A1015);
+      RoundedRectRenderer.draw(context, tileX, tileY, tile, tile / 2, 4, 0xFF38121A);
+
+      int accentARGB = 0xFF000000 | (accent.textColor & 0xFFFFFF);
+      Text noteGlyph = plainText("\u266A");
+      int glyphW = tr.getWidth(noteGlyph);
+      int glyphX = tileX + tile / 2 - glyphW / 2;
+      int glyphY = tileY + tile / 2 - tr.fontHeight / 2;
+      context.drawText(tr, noteGlyph, glyphX, glyphY, accentARGB, true);
+
+      context.drawText(tr, titleLabel, textX, y + padY + 2, 0xFFFFFFFF, true);
+      context.drawText(tr, artistLabel, textX, y + padY + 2 + tr.fontHeight + 2, 0xFFA0A0A0, true);
+
+      Text heart = plainText("\u2665");
+      int heartW = tr.getWidth(heart);
+      int heartX = x + cardW - padX - heartW;
+      int heartY = y + padY;
+      context.drawText(tr, heart, heartX, heartY, accentARGB, true);
+
+      int barX = textX;
+      int barY = y + cardH - padY - 3;
+      int barW = rightInner - barX;
+      context.fill(barX, barY, barX + barW, barY + 1, 0xFF2A1015);
+      long now = System.currentTimeMillis();
+      float progress = ((now / 80L) % 100) / 100.0F;
+      int filled = Math.max(2, (int) (barW * progress));
+      context.fill(barX, barY, barX + filled, barY + 1, accentARGB);
+
+      return y + cardH + LINE_GAP;
+   }
+
+   private static String truncateForWidth(TextRenderer tr, String text, int maxWidth, boolean useTitleFont) {
+      if (text == null || text.isEmpty()) {
+         return "";
+      }
+      Text probe = useTitleFont ? titleText(text) : plainText(text);
+      if (tr.getWidth(probe) <= maxWidth) {
+         return text;
+      }
+      String suffix = "\u2026";
+      String candidate = text;
+      while (candidate.length() > 1) {
+         candidate = candidate.substring(0, candidate.length() - 1);
+         Text trimmed = useTitleFont ? titleText(candidate + suffix) : plainText(candidate + suffix);
+         if (tr.getWidth(trimmed) <= maxWidth) {
+            return candidate + suffix;
+         }
+      }
+      return suffix;
    }
 
    private static final java.util.Set<String> ARRAYLIST_HIDDEN = java.util.Set.of("HUDOptions", "MenuStyle");
