@@ -182,12 +182,6 @@ public class CustomTitleScreen extends Screen {
             int textColor = hovered ? textA << 24 | 16777215 : textA << 24 | 13426158;
             int labelW = this.textRenderer.getWidth(LABELS[i]);
             context.drawText(this.textRenderer, Text.literal(LABELS[i]), drawX + 110 - labelW / 2, btnY + 14 - 4, textColor, true);
-            if (this.btnHover[i] > 0.01F) {
-               int lineA = (int)(this.btnHover[i] * 100.0F * alphaF);
-               int lineW = (int)(192.0F * this.btnHover[i]);
-               int lineX = drawX + 110 - lineW / 2;
-               RoundedRectRenderer.draw(context, lineX, btnY + 28 - 3, lineW, 2, 1, lineA << 24 | accentRgb);
-            }
          }
       }
    }

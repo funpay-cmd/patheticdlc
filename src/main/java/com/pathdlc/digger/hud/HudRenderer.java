@@ -6,6 +6,7 @@ import com.pathdlc.digger.gui.GuiSettings;
 import com.pathdlc.digger.gui.Module;
 import com.pathdlc.digger.gui.ModuleManager;
 import com.pathdlc.digger.gui.ModuleSetting;
+import com.pathdlc.digger.render.Animations;
 import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.RoundedRectRenderer;
 import com.pathdlc.digger.render.StyledTextCache;
@@ -75,6 +76,9 @@ public final class HudRenderer {
          return;
       }
 
+      Animations.beginFrame();
+      tickModuleVisibility();
+
       GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
       TextRenderer tr = client.textRenderer;
       int sw = client.getWindow().getScaledWidth();
@@ -132,21 +136,25 @@ public final class HudRenderer {
       }
    }
 
+   private static float autoEventAnim = 0.0F;
+
    private static void renderAutoEvent(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw) {
       List<AutoEventBot.EventEntry> events = AutoEventBot.snapshot();
-      if (events.isEmpty()) {
+      float target = events.isEmpty() ? 0.0F : 1.0F;
+      autoEventAnim = Animations.ease(autoEventAnim, target, 0.07F);
+      if (events.isEmpty() && autoEventAnim < 0.005F) {
          return;
       }
       events.sort(Comparator.comparingLong(e -> e.startEpochMs <= 0L ? Long.MAX_VALUE : e.startEpochMs));
 
+      float anim = Animations.smoothstep(autoEventAnim);
       // Compact layout: one row per event, no header/divider, tight padding.
       int compactPadX = 6;
       int compactPadY = 3;
       int rowH = tr.fontHeight + compactPadY * 2;
-      int totalH = events.size() * rowH + (events.size() - 1);
 
       int maxRowW = 0;
-      String[][] cells = new String[events.size()][3];
+      String[][] cells = new String[Math.max(events.size(), 1)][3];
       for (int i = 0; i < events.size(); i++) {
          AutoEventBot.EventEntry e = events.get(i);
          double dist = AutoEventBot.distance(e);
@@ -163,11 +171,13 @@ public final class HudRenderer {
       }
       int rowW = maxRowW + compactPadX * 2;
       int x = sw / 2 - rowW / 2;
-      int y = MARGIN;
+      int slideY = (int) ((1.0F - anim) * -8.0F);
+      int y = MARGIN + slideY;
 
       int rowY = y;
+      int bgAlpha = (int) (204.0F * anim);
       for (int i = 0; i < events.size(); i++) {
-         RoundedRectRenderer.draw(context, x, rowY, rowW, rowH, 4, 0xCC1A0A0F);
+         RoundedRectRenderer.draw(context, x, rowY, rowW, rowH, 4, (bgAlpha << 24) | 0x1A0A0F);
 
          Text name = plainText(cells[i][0]);
          Text dist = monoText(cells[i][1]);
@@ -175,11 +185,15 @@ public final class HudRenderer {
          int distW = tr.getWidth(dist);
          int cdW = tr.getWidth(countdown);
          int rowTextY = rowY + rowH / 2 - tr.fontHeight / 2;
-         context.drawText(tr, name, x + compactPadX, rowTextY, 0xFFFFFFFF, true);
+         int textA = (int) (255.0F * anim);
+         int dimA = (int) (170.0F * anim);
+         int accentA = ((int) (((accent.textColor >>> 24) & 0xFF) * anim)) << 24
+               | (accent.textColor & 0xFFFFFF);
+         context.drawText(tr, name, x + compactPadX, rowTextY, (textA << 24) | 0xFFFFFF, true);
          int countdownX = x + rowW - compactPadX - cdW;
          int distX = countdownX - 8 - distW;
-         context.drawText(tr, dist, distX, rowTextY, 0xFFAAAAAA, true);
-         context.drawText(tr, countdown, countdownX, rowTextY, accent.textColor, true);
+         context.drawText(tr, dist, distX, rowTextY, (dimA << 24) | 0xAAAAAA, true);
+         context.drawText(tr, countdown, countdownX, rowTextY, accentA, true);
          rowY += rowH + 1;
       }
    }
@@ -353,32 +367,41 @@ public final class HudRenderer {
    private static final java.util.Set<String> ARRAYLIST_HIDDEN = java.util.Set.of("HUDOptions", "MenuStyle");
 
    private static void renderArrayList(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int screenW) {
-      List<Module> enabled = collectEnabled();
-      enabled.removeIf(m -> ARRAYLIST_HIDDEN.contains(m.getName()));
-      if (enabled.isEmpty()) {
+      List<Module> visible = collectVisible();
+      if (visible.isEmpty()) {
          return;
       }
 
-      enabled.sort(Comparator.comparingInt((Module m) -> measureWidth(tr, m.getName())).reversed());
+      visible.sort(Comparator.comparingInt((Module m) -> measureWidth(tr, m.getName())).reversed());
 
       int rowH = tr.fontHeight + PAD_Y * 2;
-      int y = MARGIN;
+      float yF = (float) MARGIN;
       int rightEdge = screenW - MARGIN;
 
-      for (Module m : enabled) {
+      for (Module m : visible) {
+         float anim = Animations.smoothstep(m.visibilityAnim);
+         if (anim < 0.005F) {
+            continue;
+         }
          String labelText = m.getName();
          Text label = styledText(labelText);
          int textW = measureWidth(tr, labelText);
          int rowW = textW + PAD_X * 2 + 4;
-         int x = rightEdge - rowW;
+         int slideX = (int) ((1.0F - anim) * (rowW + 8));
+         int x = rightEdge - rowW + slideX;
+         int y = Math.round(yF);
 
-         RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
+         int bgAlpha = (int) (192.0F * anim);
+         int bgColor = (bgAlpha << 24) | 0x1A0A0F;
+         RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, bgColor);
 
          int textX = x + PAD_X;
          int textY = y + rowH / 2 - tr.fontHeight / 2;
-         context.drawText(tr, label, textX, textY, 0xFFFFFFFF, true);
+         int textAlpha = (int) (255.0F * anim);
+         int textColor = (textAlpha << 24) | 0xFFFFFF;
+         context.drawText(tr, label, textX, textY, textColor, true);
 
-         y += rowH + 1;
+         yF += (rowH + 1) * anim;
       }
    }
 
@@ -391,9 +414,17 @@ public final class HudRenderer {
       return Math.max(styled, plain);
    }
 
+   private static float targetHudAnim = 0.0F;
+
    private static void renderTargetHud(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw, int sh, MinecraftClient client) {
       LivingEntity target = currentTarget(client);
-      if (target == null || !target.isAlive()) {
+      boolean alive = target != null && target.isAlive();
+      float targetVal = alive ? 1.0F : 0.0F;
+      targetHudAnim = Animations.ease(targetHudAnim, targetVal, 0.06F);
+      if (!alive && targetHudAnim < 0.005F) {
+         return;
+      }
+      if (target == null) {
          return;
       }
 
@@ -410,10 +441,12 @@ public final class HudRenderer {
       int textBlockW = Math.max(nameW, statsW);
       int rowW = PAD_X * 2 + logoSize + LOGO_TEXT_GAP + textBlockW;
       int rowH = Math.max(logoSize + PAD_Y * 2 + 6, PAD_Y * 2 + tr.fontHeight * 2 + 4 + 6);
+      float anim = Animations.smoothstep(targetHudAnim);
       int x = sw / 2 - rowW / 2;
-      int y = sh - rowH - 60;
+      int y = sh - rowH - 60 + (int) ((1.0F - anim) * 6.0F);
 
-      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 5, 0xCC1A0A0F);
+      int bgA = (int) (204.0F * anim);
+      RoundedRectRenderer.draw(context, x, y, rowW, rowH, 5, (bgA << 24) | 0x1A0A0F);
 
       int avatarSize = logoSize;
       int avatarX = x + PAD_X;
@@ -449,18 +482,23 @@ public final class HudRenderer {
 
       int textX = avatarX + avatarSize + LOGO_TEXT_GAP;
       int textY = y + PAD_Y;
-      context.drawText(tr, nameLabel, textX, textY, 0xFFFFFFFF, true);
-      context.drawText(tr, statsLabel, textX, textY + tr.fontHeight + 2, 0xFFAAAAAA, true);
+      int nameA = (int) (255.0F * anim);
+      int statsA = (int) (170.0F * anim);
+      context.drawText(tr, nameLabel, textX, textY, (nameA << 24) | 0xFFFFFF, true);
+      context.drawText(tr, statsLabel, textX, textY + tr.fontHeight + 2, (statsA << 24) | 0xAAAAAA, true);
 
       int barX = textX;
       int barY = y + rowH - PAD_Y - 4;
       int barW = textBlockW;
       int barH = 4;
-      RoundedRectRenderer.draw(context, barX, barY, barW, barH, 2, 0x80222222);
+      int trackA = (int) (128.0F * anim);
+      RoundedRectRenderer.draw(context, barX, barY, barW, barH, 2, (trackA << 24) | 0x222222);
       int fillW = (int)(barW * (health / maxHealth));
       int healthColor = healthBarColor(health / maxHealth, accent);
+      int healthA = (int) (((healthColor >>> 24) & 0xFF) * anim);
+      int healthRGB = healthColor & 0xFFFFFF;
       if (fillW > 0) {
-         RoundedRectRenderer.draw(context, barX, barY, fillW, barH, 2, healthColor);
+         RoundedRectRenderer.draw(context, barX, barY, fillW, barH, 2, (healthA << 24) | healthRGB);
       }
    }
 
@@ -605,6 +643,26 @@ public final class HudRenderer {
          }
       }
       return out;
+   }
+
+   private static List<Module> collectVisible() {
+      List<Module> out = new ArrayList<>();
+      for (Module m : ModuleManager.values()) {
+         if (ARRAYLIST_HIDDEN.contains(m.getName())) {
+            continue;
+         }
+         if (m.isEnabled() || m.visibilityAnim > 0.005F) {
+            out.add(m);
+         }
+      }
+      return out;
+   }
+
+   private static void tickModuleVisibility() {
+      for (Module m : ModuleManager.values()) {
+         float target = m.isEnabled() ? 1.0F : 0.0F;
+         m.visibilityAnim = Animations.ease(m.visibilityAnim, target, 0.05F);
+      }
    }
 
    private static Text styledText(String s) {

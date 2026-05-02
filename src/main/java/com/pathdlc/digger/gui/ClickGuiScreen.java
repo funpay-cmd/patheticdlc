@@ -1,5 +1,6 @@
 package com.pathdlc.digger.gui;
 
+import com.pathdlc.digger.render.Animations;
 import com.pathdlc.digger.render.LiquidGlassRenderer;
 import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.RoundedRectRenderer;
@@ -218,10 +219,9 @@ public class ClickGuiScreen extends Screen {
    }
 
    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-      this.openProgress = this.openProgress + (1.0F - this.openProgress) * 0.15F;
-      if (this.openProgress > 0.99F) {
-         this.openProgress = 1.0F;
-      }
+      Animations.beginFrame();
+      this.openProgress = Animations.ease(this.openProgress, 1.0F, 0.06F);
+      this.tickModuleAnimations();
 
       if (!(this.openProgress < 0.01F)) {
          LiquidGlassRenderer.captureAndBlur();
@@ -248,6 +248,57 @@ public class ClickGuiScreen extends Screen {
          }
 
          super.render(context, mouseX, mouseY, delta);
+      }
+   }
+
+   private static int blendColor(int from, int to, float t) {
+      if (t <= 0.0F) {
+         return from;
+      }
+      if (t >= 1.0F) {
+         return to;
+      }
+      int fa = (from >>> 24) & 0xFF;
+      int fr = (from >> 16) & 0xFF;
+      int fg = (from >> 8) & 0xFF;
+      int fb = from & 0xFF;
+      int ta = (to >>> 24) & 0xFF;
+      int tr = (to >> 16) & 0xFF;
+      int tg = (to >> 8) & 0xFF;
+      int tb = to & 0xFF;
+      int a = (int) (fa + (ta - fa) * t);
+      int r = (int) (fr + (tr - fr) * t);
+      int g = (int) (fg + (tg - fg) * t);
+      int b = (int) (fb + (tb - fb) * t);
+      return (a << 24) | (r << 16) | (g << 8) | b;
+   }
+
+   private void drawAnimToggle(DrawContext ctx, int x, int y, int w, int h, float anim, int offBg, int onBg) {
+      float eased = Animations.smoothstep(anim);
+      int bg = blendColor(offBg, onBg, eased);
+      RoundedRectRenderer.draw(ctx, x, y, w, h, h / 2, bg);
+      int knobD = h - 2;
+      int leftX = x + 1;
+      int rightX = x + w - knobD - 1;
+      int knobX = Math.round(leftX + (rightX - leftX) * eased);
+      RoundedRectRenderer.draw(ctx, knobX, y + 1, knobD, knobD, knobD / 2, -1);
+   }
+
+   private void tickModuleAnimations() {
+      for (Category cat : this.categories) {
+         for (ModuleButton btn : cat.getModules()) {
+            Module m = btn.getModule();
+            float toggleTarget = m.isEnabled() ? 1.0F : 0.0F;
+            m.enabledAnim = Animations.ease(m.enabledAnim, toggleTarget, 0.05F);
+            float expandTarget = m.isSettingsExpanded() ? 1.0F : 0.0F;
+            m.expandedAnim = Animations.ease(m.expandedAnim, expandTarget, 0.07F);
+            for (ModuleSetting s : m.getSettings()) {
+               if (s.getType() == ModuleSetting.Type.TOGGLE) {
+                  float t = s.getBool() ? 1.0F : 0.0F;
+                  s.toggleAnim = Animations.ease(s.toggleAnim, t, 0.05F);
+               }
+            }
+         }
       }
    }
 
@@ -436,11 +487,13 @@ public class ClickGuiScreen extends Screen {
             && mouseY >= mainY + 2
             && mouseY < mainY + mainH - 2;
          btn.updateHover(hovered);
-         if (mod.isEnabled()) {
-            RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, (int)(78.0F * alpha) << 24 | accent.textColor & 16777215);
-         } else if (btn.hoverAmount > 0.01F) {
+         if (btn.hoverAmount > 0.01F) {
             int hAlpha = (int)(btn.hoverAmount * 36.0F * alpha);
             RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, hAlpha << 24 | 16777215);
+         }
+         if (mod.enabledAnim > 0.01F) {
+            int eAlpha = (int)(mod.enabledAnim * 78.0F * alpha);
+            RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, eAlpha << 24 | accent.textColor & 16777215);
          }
 
          int nameColor = mod.isEnabled() ? -1 : -3355444;
@@ -450,11 +503,8 @@ public class ClickGuiScreen extends Screen {
          int sh = 12;
          int tx = mainX + mainW - 12 - sw;
          int ty = rowY + rowH / 2 - sh / 2;
-         int bgColor = mod.isEnabled() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
-         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
-         int knobD = sh - 2;
-         int knobX = mod.isEnabled() ? tx + sw - knobD - 1 : tx + 1;
-         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+         int onBg = 0xBB000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, tx, ty, sw, sh, mod.enabledAnim, 0x44303030, onBg);
          if (mod.hasSettings()) {
             String arrow = mod.isSettingsExpanded() ? "v" : ">";
             int arrowColor = mod.isSettingsExpanded() ? accent.textColor : -8947849;
@@ -505,11 +555,8 @@ public class ClickGuiScreen extends Screen {
          int sh = 8;
          int tx = right - sw - 2;
          int ty = y + 8 - sh / 2;
-         int bgColor = setting.getBool() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
-         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
-         int knobD = sh - 2;
-         int knobX = setting.getBool() ? tx + sw - knobD - 1 : tx + 1;
-         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+         int onBg = 0xBB000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, tx, ty, sw, sh, setting.toggleAnim, 0x44303030, onBg);
       } else if (setting.getType() == ModuleSetting.Type.CHOICE) {
          this.drawStyledText(context, setting.getName(), left + 2, y + 4, -8947849);
          String val = setting.getChoiceValue();
@@ -547,11 +594,13 @@ public class ClickGuiScreen extends Screen {
             && mouseY >= contentY
             && mouseY < contentY + maxContentH;
          btn.updateHover(hovered);
-         if (mod.isEnabled()) {
-            RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, (int)(68.0F * alpha) << 24 | accent.textColor & 16777215);
-         } else if (btn.hoverAmount > 0.01F) {
+         if (btn.hoverAmount > 0.01F) {
             int hAlpha = (int)(btn.hoverAmount * 32.0F * alpha);
             RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, hAlpha << 24 | 16777215);
+         }
+         if (mod.enabledAnim > 0.01F) {
+            int eAlpha = (int)(mod.enabledAnim * 68.0F * alpha);
+            RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, eAlpha << 24 | accent.textColor & 16777215);
          }
 
          int nameColor = mod.isEnabled() ? -1 : -5592406;
@@ -615,11 +664,8 @@ public class ClickGuiScreen extends Screen {
          int sh = 8;
          int tx = right - sw - 2;
          int ty = y + 8 - sh / 2;
-         int bgColor = setting.getBool() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
-         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
-         int knobD = sh - 2;
-         int knobX = setting.getBool() ? tx + sw - knobD - 1 : tx + 1;
-         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+         int onBg = 0xBB000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, tx, ty, sw, sh, setting.toggleAnim, 0x44303030, onBg);
       } else if (setting.getType() == ModuleSetting.Type.CHOICE) {
          this.drawStyledText(context, setting.getName(), left + 2, y + 4, -8947849);
          String val = setting.getChoiceValue();
@@ -1043,11 +1089,13 @@ public class ClickGuiScreen extends Screen {
             && mouseY >= rowY && mouseY < rowY + rowH
             && mouseY >= contentY + 2 && mouseY < contentY + contentH - 2;
          btn.updateHover(hovered);
-         if (mod.isEnabled()) {
-            RoundedRectRenderer.draw(context, contentX + 8, rowY, contentW - 16, rowH, 5, (int)(78.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
-         } else if (btn.hoverAmount > 0.01F) {
+         if (btn.hoverAmount > 0.01F) {
             int hAlpha = (int)(btn.hoverAmount * 36.0F * alpha);
             RoundedRectRenderer.draw(context, contentX + 8, rowY, contentW - 16, rowH, 5, hAlpha << 24 | 0xFFFFFF);
+         }
+         if (mod.enabledAnim > 0.01F) {
+            int eAlpha = (int)(mod.enabledAnim * 78.0F * alpha);
+            RoundedRectRenderer.draw(context, contentX + 8, rowY, contentW - 16, rowH, 5, eAlpha << 24 | accent.textColor & 0xFFFFFF);
          }
          int nameColor = mod.isEnabled() ? -1 : -3355444;
          this.drawStyledText(context, mod.getName(), contentX + 16, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
@@ -1055,11 +1103,8 @@ public class ClickGuiScreen extends Screen {
          int sh = 12;
          int toggleX = contentX + contentW - 16 - sw;
          int toggleY = rowY + rowH / 2 - sh / 2;
-         int bgColor = mod.isEnabled() ? 0xC0000000 | (accent.textColor & 0xFFFFFF) : 0x80444444;
-         RoundedRectRenderer.draw(context, toggleX, toggleY, sw, sh, sh / 2, bgColor);
-         int knobD = sh - 2;
-         int knobX = mod.isEnabled() ? toggleX + sw - knobD - 1 : toggleX + 1;
-         RoundedRectRenderer.draw(context, knobX, toggleY + 1, knobD, knobD, knobD / 2, -1);
+         int onBg = 0xC0000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, toggleX, toggleY, sw, sh, mod.enabledAnim, 0x66333333, onBg);
          if (mod.hasSettings()) {
             String arrow = mod.isSettingsExpanded() ? "v" : ">";
             this.drawStyledText(context, arrow, toggleX - 14, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
@@ -1256,11 +1301,13 @@ public class ClickGuiScreen extends Screen {
                int rowH = COMPACT_MODULE_H;
                boolean rowHover = mouseX >= sx + 14 && mouseX <= sx + w - 6 && mouseY >= y && mouseY < y + rowH;
                btn.updateHover(rowHover);
-               if (mod.isEnabled()) {
-                  RoundedRectRenderer.draw(context, sx + 14, y, w - 20, rowH, 4, (int)(70.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
-               } else if (btn.hoverAmount > 0.01F) {
+               if (btn.hoverAmount > 0.01F) {
                   int hAlpha = (int)(btn.hoverAmount * 30.0F * alpha);
                   RoundedRectRenderer.draw(context, sx + 14, y, w - 20, rowH, 4, hAlpha << 24 | 0xFFFFFF);
+               }
+               if (mod.enabledAnim > 0.01F) {
+                  int eAlpha = (int)(mod.enabledAnim * 70.0F * alpha);
+                  RoundedRectRenderer.draw(context, sx + 14, y, w - 20, rowH, 4, eAlpha << 24 | accent.textColor & 0xFFFFFF);
                }
                int nameColor = mod.isEnabled() ? -1 : -5592406;
                this.drawStyledText(context, mod.getName(), sx + 18, y + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
@@ -1439,11 +1486,13 @@ public class ClickGuiScreen extends Screen {
             boolean rowHover = mouseX >= ox + 8 && mouseX <= ox + ow - 8 && mouseY >= rowY && mouseY < rowY + rowH
                && mouseY >= listTop && mouseY < listBottom;
             btn.updateHover(rowHover);
-            if (mod.isEnabled()) {
-               RoundedRectRenderer.draw(context, ox + 8, rowY, ow - 16, rowH, 5, (int)(76.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
-            } else if (btn.hoverAmount > 0.01F) {
+            if (btn.hoverAmount > 0.01F) {
                int hAlpha = (int)(btn.hoverAmount * 32.0F * alpha);
                RoundedRectRenderer.draw(context, ox + 8, rowY, ow - 16, rowH, 5, hAlpha << 24 | 0xFFFFFF);
+            }
+            if (mod.enabledAnim > 0.01F) {
+               int eAlpha = (int)(mod.enabledAnim * 76.0F * alpha);
+               RoundedRectRenderer.draw(context, ox + 8, rowY, ow - 16, rowH, 5, eAlpha << 24 | accent.textColor & 0xFFFFFF);
             }
             int nameColor = mod.isEnabled() ? -1 : -3355444;
             this.drawStyledText(context, mod.getName(), ox + 16, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
@@ -1451,11 +1500,8 @@ public class ClickGuiScreen extends Screen {
             int sh = 12;
             int toggleX = ox + ow - 16 - sw;
             int toggleY = rowY + rowH / 2 - sh / 2;
-            int bgColor = mod.isEnabled() ? 0xC0000000 | (accent.textColor & 0xFFFFFF) : 0x80444444;
-            RoundedRectRenderer.draw(context, toggleX, toggleY, sw, sh, sh / 2, bgColor);
-            int knobD = sh - 2;
-            int knobX = mod.isEnabled() ? toggleX + sw - knobD - 1 : toggleX + 1;
-            RoundedRectRenderer.draw(context, knobX, toggleY + 1, knobD, knobD, knobD / 2, -1);
+            int onBg = 0xC0000000 | (accent.textColor & 0xFFFFFF);
+            this.drawAnimToggle(context, toggleX, toggleY, sw, sh, mod.enabledAnim, 0x66333333, onBg);
             if (mod.hasSettings()) {
                String marrow = mod.isSettingsExpanded() ? "v" : ">";
                this.drawStyledText(context, marrow, toggleX - 14, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
