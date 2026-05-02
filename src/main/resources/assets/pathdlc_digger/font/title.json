@@ -2,9 +2,9 @@
   "providers": [
     {
       "type": "ttf",
-      "file": "pathdlc_digger:inter-medium.ttf",
+      "file": "pathdlc_digger:inter-semibold.ttf",
       "shift": [0, 1.0],
-      "size": 10.5,
+      "size": 12.0,
       "oversample": 4.0
     },
     {

@@ -39,6 +39,8 @@ import net.minecraft.util.hit.HitResult;
 public final class HudRenderer {
    private static final Identifier LOGO = Identifier.of("pathdlc_digger", "textures/gui/logo.png");
    private static final Identifier CUSTOM_FONT = Identifier.of("pathdlc_digger", "clickgui");
+   private static final Identifier MONO_FONT = Identifier.of("pathdlc_digger", "mono");
+   private static final Identifier TITLE_FONT = Identifier.of("pathdlc_digger", "title");
    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
    private static final int MARGIN = 6;
@@ -99,18 +101,18 @@ public final class HudRenderer {
 
       if (widgetEnabled("FPS", true)) {
          String label = client.getCurrentFps() + " FPS";
-         bottomRightY = renderInfoRowRight(context, tr, accent, sw - MARGIN, bottomRightY, label);
+         bottomRightY = renderInfoRowRight(context, tr, accent, sw - MARGIN, bottomRightY, label, true);
       }
 
       if (widgetEnabled("Ping", true)) {
          int ping = currentPing(client);
          String label = (ping >= 0 ? ping : 0) + " ms";
-         bottomRightY = renderInfoRowRight(context, tr, accent, sw - MARGIN, bottomRightY, label);
+         bottomRightY = renderInfoRowRight(context, tr, accent, sw - MARGIN, bottomRightY, label, true);
       }
 
       if (widgetEnabled("Time", false)) {
          String label = LocalTime.now().format(TIME_FMT);
-         bottomLeftY = renderInfoRow(context, tr, accent, MARGIN, bottomLeftY, label);
+         bottomLeftY = renderInfoRow(context, tr, accent, MARGIN, bottomLeftY, label, true);
       }
 
       if (widgetEnabled("Coords", true)) {
@@ -118,7 +120,7 @@ public final class HudRenderer {
          double y = client.player.getY();
          double z = client.player.getZ();
          String label = String.format("XYZ %.0f %.0f %.0f", x, y, z);
-         bottomLeftY = renderInfoRow(context, tr, accent, MARGIN, bottomLeftY, label);
+         bottomLeftY = renderInfoRow(context, tr, accent, MARGIN, bottomLeftY, label, true);
       }
 
       if (widgetEnabled("TargetHUD", true)) {
@@ -150,12 +152,12 @@ public final class HudRenderer {
          cells[i][0] = e.name;
          cells[i][1] = dist >= 0.0 ? String.format("%dm", (int) Math.round(dist)) : "--";
          cells[i][2] = AutoEventBot.formatCountdown(e);
-         int w = tr.getWidth(plainText(cells[i][0])) + tr.getWidth(plainText(cells[i][1])) + tr.getWidth(plainText(cells[i][2])) + 60;
+         int w = tr.getWidth(plainText(cells[i][0])) + tr.getWidth(monoText(cells[i][1])) + tr.getWidth(monoText(cells[i][2])) + 60;
          if (w > maxRowW) {
             maxRowW = w;
          }
       }
-      int headerLabelW = tr.getWidth(styledText("Events"));
+      int headerLabelW = tr.getWidth(titleText("Events"));
       int rowW = Math.max(maxRowW, headerLabelW + 32);
       int x = sw / 2 - rowW / 2;
       int y = MARGIN + 4;
@@ -163,14 +165,14 @@ public final class HudRenderer {
       RoundedRectRenderer.draw(context, x, y, rowW, totalH, 6, 0xCC1A0A0F);
 
       int textY = y + PAD_Y;
-      context.drawText(tr, styledText("Events"), x + PAD_X, textY, 0xFFFFFFFF, true);
+      context.drawText(tr, titleText("Events"), x + PAD_X, textY, 0xFFFFFFFF, true);
       context.fill(x + 4, y + headerH, x + rowW - 4, y + headerH + 1, 0x40FFFFFF);
 
       int rowY = y + headerH + 2;
       for (int i = 0; i < events.size(); i++) {
          Text name = plainText(cells[i][0]);
-         Text dist = plainText(cells[i][1]);
-         Text countdown = plainText(cells[i][2]);
+         Text dist = monoText(cells[i][1]);
+         Text countdown = monoText(cells[i][2]);
          int distW = tr.getWidth(dist);
          int cdW = tr.getWidth(countdown);
          int rowTextY = rowY + rowH / 2 - tr.fontHeight / 2;
@@ -196,7 +198,7 @@ public final class HudRenderer {
    }
 
    private static int renderWatermark(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int x, int y) {
-      Text label = styledText("WareVisuals");
+      Text label = titleText("WareVisuals");
       int textW = tr.getWidth(label);
       int rowH = Math.max(LOGO_SIZE, tr.fontHeight) + PAD_Y * 2;
       int rowW = PAD_X * 2 + LOGO_SIZE + LOGO_TEXT_GAP + textW;
@@ -225,7 +227,11 @@ public final class HudRenderer {
    }
 
    private static int renderInfoRow(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int x, int y, String text) {
-      Text label = plainText(text);
+      return renderInfoRow(context, tr, accent, x, y, text, false);
+   }
+
+   private static int renderInfoRow(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int x, int y, String text, boolean mono) {
+      Text label = mono ? monoText(text) : plainText(text);
       int textW = tr.getWidth(label);
       int rowH = tr.fontHeight + PAD_Y * 2;
       int rowW = textW + PAD_X * 2;
@@ -239,7 +245,11 @@ public final class HudRenderer {
    }
 
    private static int renderInfoRowRight(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int rightX, int y, String text) {
-      Text label = plainText(text);
+      return renderInfoRowRight(context, tr, accent, rightX, y, text, false);
+   }
+
+   private static int renderInfoRowRight(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int rightX, int y, String text, boolean mono) {
+      Text label = mono ? monoText(text) : plainText(text);
       int textW = tr.getWidth(label);
       int rowH = tr.fontHeight + PAD_Y * 2;
       int rowW = textW + PAD_X * 2;
@@ -494,6 +504,26 @@ public final class HudRenderer {
    }
 
    private static Text plainText(String s) {
-      return Text.literal(s == null ? "" : s);
+      String safe = s == null ? "" : s;
+      if (!GuiSettings.isCustomFontEnabled()) {
+         return Text.literal(safe);
+      }
+      return Text.literal(safe).styled(style -> style.withFont(CUSTOM_FONT));
+   }
+
+   private static Text monoText(String s) {
+      String safe = s == null ? "" : s;
+      if (!GuiSettings.isCustomFontEnabled()) {
+         return Text.literal(safe);
+      }
+      return Text.literal(safe).styled(style -> style.withFont(MONO_FONT));
+   }
+
+   private static Text titleText(String s) {
+      String safe = s == null ? "" : s;
+      if (!GuiSettings.isCustomFontEnabled()) {
+         return Text.literal(safe);
+      }
+      return Text.literal(safe).styled(style -> style.withFont(TITLE_FONT));
    }
 }
