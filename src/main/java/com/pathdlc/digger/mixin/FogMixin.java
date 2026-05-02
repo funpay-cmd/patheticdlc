@@ -25,6 +25,11 @@ public abstract class FogMixin {
    private static void onApplyFog(
       Camera camera, BackgroundRenderer.FogType fogType, Vector4f color, float viewDistance, boolean thickFog, float tickDelta, CallbackInfoReturnable<Fog> cir
    ) {
+      if (ModuleManager.isEnabled("NoFog")) {
+         float far = Math.max(viewDistance, 1024.0F) * 8.0F;
+         cir.setReturnValue(new Fog(far * 0.95F, far, FogShape.SPHERE, color.x, color.y, color.z, color.w));
+         return;
+      }
       if (ModuleManager.isEnabled("Fog")) {
          Module mod = ModuleManager.get("Fog");
          int colorIndex = 0;

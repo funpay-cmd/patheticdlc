@@ -99,6 +99,29 @@ public class ClickGuiScreen extends Screen {
          modules.addModule(autoEvent);
          this.categories.add(modules);
 
+         Module fullBright = new Module("FullBright");
+         Module timeChanger = new Module("TimeChanger");
+         timeChanger.addSetting(ModuleSetting.choice("Time", new String[]{"Day", "Night", "Sunrise", "Sunset"}, 0));
+         Module noWeather = new Module("NoWeather");
+         Module noFog = new Module("NoFog");
+         Module noHurtCam = new Module("NoHurtCam");
+         Module autoRespawn = new Module("AutoRespawn");
+         Module autoReconnect = new Module("AutoReconnect");
+         autoReconnect.addSetting(ModuleSetting.slider("Delay", 5.0F, 1.0F, 30.0F, 1.0F));
+         Module blockEsp = new Module("BlockESP");
+         Module blockOverlay = new Module("BlockOverlay");
+         Category world = new Category("World", 0.0F, 0.0F);
+         world.addModule(fullBright);
+         world.addModule(timeChanger);
+         world.addModule(noWeather);
+         world.addModule(noFog);
+         world.addModule(noHurtCam);
+         world.addModule(autoRespawn);
+         world.addModule(autoReconnect);
+         world.addModule(blockEsp);
+         world.addModule(blockOverlay);
+         this.categories.add(world);
+
          Module hudOptions = new Module("HUDOptions");
          hudOptions.addSetting(ModuleSetting.toggle("Watermark", true));
          hudOptions.addSetting(ModuleSetting.toggle("ArrayList", true));

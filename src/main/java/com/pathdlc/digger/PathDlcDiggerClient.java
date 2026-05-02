@@ -20,6 +20,7 @@ import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.SelectionRenderer;
 import com.pathdlc.digger.selection.SelectionManager;
 import com.pathdlc.digger.util.Chat;
+import com.pathdlc.digger.world.WorldStateController;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.EndTick;
@@ -83,6 +84,7 @@ public class PathDlcDiggerClient implements ClientModInitializer {
                FARMS.tick(client);
                CLAN.tick(client);
                AutoEventBot.onClientTick(client);
+               WorldStateController.tick(client);
             }
          );
       WorldRenderEvents.AFTER_ENTITIES.register((AfterEntities)context -> {
