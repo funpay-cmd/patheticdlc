@@ -11,7 +11,9 @@
     "WeatherRenderingMixin",
     "HurtCamMixin",
     "FovMixin",
-    "CrosshairMixin"
+    "CrosshairMixin",
+    "NoRenderMixin",
+    "NoBossBarMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -144,6 +144,13 @@ public class ClickGuiScreen extends Screen {
 
          Module tntTimer = new Module("TNTTimer");
 
+         Module noRender = new Module("NoRender");
+         noRender.addSetting(ModuleSetting.toggle("BossBar", false));
+         noRender.addSetting(ModuleSetting.toggle("Scoreboard", false));
+         noRender.addSetting(ModuleSetting.toggle("Portal", false));
+         noRender.addSetting(ModuleSetting.toggle("Overlays", false));
+         noRender.addSetting(ModuleSetting.toggle("Nausea", false));
+
          Category world = new Category("World", 0.0F, 0.0F);
          world.addModule(fullBright);
          world.addModule(timeChanger);
@@ -159,6 +166,7 @@ public class ClickGuiScreen extends Screen {
          world.addModule(crosshair);
          world.addModule(zoom);
          world.addModule(tntTimer);
+         world.addModule(noRender);
          world.addModule(autoRespawn);
          world.addModule(autoReconnect);
          world.addModule(blockEsp);
