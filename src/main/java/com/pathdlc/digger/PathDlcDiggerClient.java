@@ -17,6 +17,7 @@ import com.pathdlc.digger.funtime.AutoSellBot;
 import com.pathdlc.digger.funtime.BaseFinderBot;
 import com.pathdlc.digger.gui.ClickGuiScreen;
 import com.pathdlc.digger.gui.ModuleManager;
+import com.pathdlc.digger.hud.HudRenderer;
 import com.pathdlc.digger.render.BlockESPRenderer;
 import com.pathdlc.digger.render.BlockOverlayRenderer;
 import com.pathdlc.digger.render.HitEffectsRenderer;
@@ -133,6 +134,7 @@ public class PathDlcDiggerClient implements ClientModInitializer {
             HitEffectsRenderer.renderHud(context);
          }
 
+         HudRenderer.render(context);
          PerformanceSettings.onFrameEnd();
       });
       Chat.later("WareVisuals loaded. Commands: .pos, .fill, .dig baritone, .apple, .clan, .warden");

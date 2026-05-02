@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.client.gui.DrawContext;
@@ -22,6 +23,7 @@ public class ClickGuiScreen extends Screen {
    private static final int CORNER_R = 8;
    private static final int SCROLL_SPEED = 10;
    private static final Identifier CUSTOM_FONT = Identifier.of("pathdlc_digger", "clickgui");
+   private static final Identifier LOGO = Identifier.of("pathdlc_digger", "textures/gui/logo.png");
    private final List<Category> categories = new ArrayList<>();
    private float openProgress = 0.0F;
    private final Map<String, Integer> scrollOffsets = new HashMap<>();
@@ -402,10 +404,45 @@ public class ClickGuiScreen extends Screen {
             this.renderDogenLayout(context, mouseX, mouseY, accent);
          } else {
             this.renderColonLayout(context, mouseX, mouseY, accent);
+            this.renderColonBrand(context, accent);
          }
 
          super.render(context, mouseX, mouseY, delta);
       }
+   }
+
+   private void renderColonBrand(DrawContext context, GuiSettings.AccentColor accent) {
+      float alpha = this.openProgress;
+      if (alpha < 0.05F) {
+         return;
+      }
+      int logoSize = 22;
+      String brand = "WareVisuals";
+      int textW = this.textRenderer.getWidth(this.styledText(brand));
+      int rowW = 14 + logoSize + 6 + textW + 14;
+      int rowH = 30;
+      int rowX = (this.width - rowW) / 2;
+      int rowY = 8 + (int)((1.0F - alpha) * -10.0F);
+      int alphaByte = (int)(alpha * 200.0F);
+      RoundedRectRenderer.draw(context, rowX, rowY, rowW, rowH, 6, alphaByte << 24 | 0x080808);
+      RoundedRectRenderer.draw(context, rowX, rowY, 2, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
+      int logoX = rowX + 14;
+      int logoY = rowY + rowH / 2 - logoSize / 2;
+      context.drawTexture(
+         RenderLayer::getGuiTextured,
+         LOGO,
+         logoX,
+         logoY,
+         0.0F,
+         0.0F,
+         logoSize,
+         logoSize,
+         logoSize,
+         logoSize
+      );
+      int textX = logoX + logoSize + 6;
+      int textY = rowY + rowH / 2 - this.textRenderer.fontHeight / 2;
+      this.drawStyledText(context, brand, textX, textY, -1);
    }
 
    private void renderColonLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
@@ -507,7 +544,27 @@ public class ClickGuiScreen extends Screen {
       Category selectedCat = this.categories.get(this.dogenSelectedCategory);
       String header = selectedCat.getName();
       int headerY = hy + DOGEN_HEADER_H / 2 - this.textRenderer.fontHeight / 2;
-      this.drawStyledText(context, header, hx + 12, headerY, -1);
+      int logoSize = 18;
+      int logoX = hx + 8;
+      int logoY = hy + DOGEN_HEADER_H / 2 - logoSize / 2;
+      context.drawTexture(
+         RenderLayer::getGuiTextured,
+         LOGO,
+         logoX,
+         logoY,
+         0.0F,
+         0.0F,
+         logoSize,
+         logoSize,
+         logoSize,
+         logoSize
+      );
+      int brandX = logoX + logoSize + 6;
+      this.drawStyledText(context, "WareVisuals", brandX, headerY, accent.textColor);
+      int brandW = this.textRenderer.getWidth(this.styledText("WareVisuals"));
+      int sepX = brandX + brandW + 8;
+      context.fill(sepX, hy + 8, sepX + 1, hy + DOGEN_HEADER_H - 8, 0x40FFFFFF);
+      this.drawStyledText(context, header, sepX + 8, headerY, -1);
       int countLabelW = this.textRenderer.getWidth(this.styledText(selectedCat.getModules().size() + " modules"));
       this.drawStyledText(
          context,
