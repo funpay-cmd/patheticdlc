@@ -105,24 +105,57 @@ public final class SystemMediaTracker {
       Process proc = null;
       try {
          proc = pb.start();
-         StringBuilder sb = new StringBuilder();
-         try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-               if (sb.length() > 0) {
-                  sb.append('\n');
+         final Process p = proc;
+         final StringBuilder sb = new StringBuilder();
+         // Read stdout on a side thread so a stuck child process (e.g. a
+         // WinRT async deadlock in PowerShell) cannot block the daemon
+         // forever — readLine itself does not honour PROCESS_TIMEOUT_MS.
+         Thread reader = new Thread(() -> {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+               String line;
+               while ((line = br.readLine()) != null) {
+                  synchronized (sb) {
+                     if (sb.length() > 0) {
+                        sb.append('\n');
+                     }
+                     sb.append(line);
+                     if (sb.length() > 1024) {
+                        break;
+                     }
+                  }
                }
-               sb.append(line);
-               if (sb.length() > 1024) {
-                  break;
-               }
+            } catch (IOException ignored) {
             }
-         }
-         if (!proc.waitFor(PROCESS_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+         }, "WareVisuals-Media-Read");
+         reader.setDaemon(true);
+         reader.start();
+
+         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(PROCESS_TIMEOUT_MS);
+         boolean exited = proc.waitFor(PROCESS_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+         if (!exited) {
             proc.destroyForcibly();
+            reader.interrupt();
+            try {
+               reader.join(250L);
+            } catch (InterruptedException ie) {
+               Thread.currentThread().interrupt();
+            }
             return null;
          }
-         return sb.toString().trim();
+
+         long remainingNs = deadline - System.nanoTime();
+         long joinMs = remainingNs > 0L ? Math.max(50L, TimeUnit.NANOSECONDS.toMillis(remainingNs)) : 250L;
+         reader.join(joinMs);
+         if (reader.isAlive()) {
+            // Process exited but the read thread is wedged — close stdout
+            // by destroying the (already exited) process handle and bail.
+            proc.destroyForcibly();
+            reader.interrupt();
+            return null;
+         }
+         synchronized (sb) {
+            return sb.toString().trim();
+         }
       } catch (IOException | InterruptedException e) {
          if (proc != null) {
             proc.destroyForcibly();
