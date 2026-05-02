@@ -80,306 +80,25 @@ public class ClickGuiScreen extends Screen {
       Runnable appleOff,
       Runnable digOn,
       Runnable digOff,
-      Runnable wardenOn,
-      Runnable wardenOff,
       Runnable clanOn,
-      Runnable clanOff,
-      Runnable autoMineOn,
-      Runnable autoMineOff,
-      Runnable baseFinderOn,
-      Runnable baseFinderOff,
-      Runnable autoFarmOn,
-      Runnable autoFarmOff,
-      Runnable autoFishOn,
-      Runnable autoFishOff,
-      Runnable autoCraftOn,
-      Runnable autoCraftOff,
-      Runnable autoSellOn,
-      Runnable autoSellOff,
-      Runnable autoBuyOn,
-      Runnable autoBuyOff
+      Runnable clanOff
    ) {
       if (this.categories.isEmpty()) {
-         Module killAura = new Module("KillAura");
-         killAura.addSetting(ModuleSetting.slider("Range", 4.0F, 2.0F, 6.0F, 0.1F));
-         killAura.addSetting(ModuleSetting.toggle("Only Crit", false));
-         killAura.addSetting(ModuleSetting.toggle("Attack Mobs", true));
-         killAura.addSetting(ModuleSetting.toggle("Attack Players", false));
-         Module aimAssist = new Module("AimAssist");
-         aimAssist.addSetting(ModuleSetting.slider("Speed", 50.0F, 10.0F, 100.0F, 5.0F));
-         aimAssist.addSetting(ModuleSetting.slider("FOV", 90.0F, 30.0F, 180.0F, 10.0F));
-         aimAssist.addSetting(ModuleSetting.toggle("Visible Only", true));
-         Module antiKnockback = new Module("AntiKB");
-         antiKnockback.addSetting(ModuleSetting.slider("Horizontal", 0.0F, 0.0F, 100.0F, 5.0F));
-         antiKnockback.addSetting(ModuleSetting.slider("Vertical", 0.0F, 0.0F, 100.0F, 5.0F));
-         Module velocity = new Module("Velocity");
-         velocity.addSetting(ModuleSetting.choice("Mode", new String[]{"Cancel", "Reduce", "Reverse"}, 0));
-         Module autoArmor = new Module("AutoArmor");
-         Module autoTotem = new Module("AutoTotem");
-         Module triggerBot = new Module("TriggerBot");
-         triggerBot.addSetting(ModuleSetting.slider("Delay", 1.0F, 0.0F, 5.0F, 1.0F));
-         Module reach = new Module("Reach");
-         reach.addSetting(ModuleSetting.slider("Distance", 3.5F, 3.0F, 6.0F, 0.1F));
-         Module antiBot = new Module("AntiBot");
-         antiBot.addSetting(ModuleSetting.choice("Mode", new String[]{"Default", "Advanced", "FunTime"}, 0));
-         Module criticals = new Module("Criticals");
-         criticals.addSetting(ModuleSetting.choice("Mode", new String[]{"Packet", "Jump", "Mini Jump"}, 0));
-         Module autoClicker = new Module("AutoClicker");
-         autoClicker.addSetting(ModuleSetting.slider("CPS", 12.0F, 1.0F, 20.0F, 1.0F));
-         autoClicker.addSetting(ModuleSetting.toggle("Right Click", false));
-         Module clan = new Module("Clan", clanOn, clanOff);
-         Category combat = new Category("Combat", 0.0F, 0.0F);
-         combat.addModule(killAura);
-         combat.addModule(aimAssist);
-         combat.addModule(antiKnockback);
-         combat.addModule(velocity);
-         combat.addModule(autoArmor);
-         combat.addModule(autoTotem);
-         combat.addModule(triggerBot);
-         combat.addModule(reach);
-         combat.addModule(antiBot);
-         combat.addModule(criticals);
-         combat.addModule(autoClicker);
-         combat.addModule(clan);
-         this.categories.add(combat);
-         Module speed = new Module("Speed");
-         speed.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Strafe", "BHop", "Low Hop"}, 0));
-         speed.addSetting(ModuleSetting.slider("Speed", 1.5F, 0.5F, 5.0F, 0.1F));
-         Module flight = new Module("Flight");
-         flight.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Glide", "Jetpack", "Creative"}, 0));
-         flight.addSetting(ModuleSetting.slider("Speed", 2.0F, 0.5F, 10.0F, 0.5F));
-         Module noFall = new Module("NoFall");
-         noFall.addSetting(ModuleSetting.choice("Mode", new String[]{"Packet", "Spoof", "MLG"}, 0));
-         Module sprint = new Module("Sprint");
-         sprint.addSetting(ModuleSetting.choice("Mode", new String[]{"Legit", "Omnidirectional"}, 0));
-         Module step = new Module("Step");
-         step.addSetting(ModuleSetting.slider("Height", 1.0F, 0.5F, 2.5F, 0.5F));
-         Module noSlowdown = new Module("NoSlow");
-         noSlowdown.addSetting(ModuleSetting.toggle("Items", true));
-         noSlowdown.addSetting(ModuleSetting.toggle("Soulsand", true));
-         noSlowdown.addSetting(ModuleSetting.toggle("Web", true));
-         Module elytraFly = new Module("ElytraFly");
-         elytraFly.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Boost", "Control"}, 0));
-         elytraFly.addSetting(ModuleSetting.slider("Speed", 1.5F, 0.5F, 5.0F, 0.1F));
-         Module jesus = new Module("Jesus");
-         jesus.addSetting(ModuleSetting.choice("Mode", new String[]{"Solid", "Dolphin", "Trident"}, 0));
-         Module sneak = new Module("Sneak");
-         sneak.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Packet", "Legit"}, 0));
-         Module spider = new Module("Spider");
-         spider.addSetting(ModuleSetting.slider("Speed", 0.5F, 0.1F, 2.0F, 0.1F));
-         Module phase = new Module("Phase");
-         Module safewalk = new Module("SafeWalk");
-         Module bunnyHop = new Module("BunnyHop");
-         Module invWalk = new Module("InvWalk");
-         Module parkour = new Module("Parkour");
-         Module antiVoid = new Module("AntiVoid");
-         Module longJump = new Module("LongJump");
-         longJump.addSetting(ModuleSetting.slider("Boost", 1.5F, 1.0F, 4.0F, 0.1F));
-         Category movement = new Category("Movement", 0.0F, 0.0F);
-         movement.addModule(speed);
-         movement.addModule(flight);
-         movement.addModule(noFall);
-         movement.addModule(sprint);
-         movement.addModule(step);
-         movement.addModule(noSlowdown);
-         movement.addModule(elytraFly);
-         movement.addModule(jesus);
-         movement.addModule(sneak);
-         movement.addModule(spider);
-         movement.addModule(phase);
-         movement.addModule(safewalk);
-         movement.addModule(bunnyHop);
-         movement.addModule(invWalk);
-         movement.addModule(parkour);
-         movement.addModule(antiVoid);
-         movement.addModule(longJump);
-         this.categories.add(movement);
-         Module esp = new Module("ESP");
-         esp.addSetting(ModuleSetting.choice("Mode", new String[]{"Box", "Glow", "2D", "Outline"}, 0));
-         esp.addSetting(ModuleSetting.toggle("Players", true));
-         esp.addSetting(ModuleSetting.toggle("Mobs", true));
-         esp.addSetting(ModuleSetting.toggle("Items", false));
-         Module tracers = new Module("Tracers");
-         tracers.addSetting(ModuleSetting.toggle("Players", true));
-         tracers.addSetting(ModuleSetting.toggle("Mobs", false));
-         Module nametags = new Module("Nametags");
-         nametags.addSetting(ModuleSetting.toggle("Health", true));
-         nametags.addSetting(ModuleSetting.toggle("Armor", true));
-         nametags.addSetting(ModuleSetting.slider("Scale", 1.5F, 0.5F, 3.0F, 0.1F));
-         Module chams = new Module("Chams");
-         chams.addSetting(ModuleSetting.choice("Mode", new String[]{"Colored", "Textured", "Flat"}, 0));
-         Module fullBright = new Module("FullBright");
-         fullBright.addSetting(ModuleSetting.choice("Mode", new String[]{"Gamma", "Night Vision"}, 0));
-         Module xray = new Module("XRay");
-         xray.addSetting(ModuleSetting.choice("Mode", new String[]{"Default", "Ores Only", "Custom"}, 0));
-         Module blockOverlay = new Module("BlockOverlay");
-         blockOverlay.addSetting(ModuleSetting.choice("Texture", new String[]{"Kitten", "Sky", "Devil"}, 0));
-         Module blockEsp = new Module("BlockESP");
-         blockEsp.addSetting(ModuleSetting.slider("Radius", 32.0F, 8.0F, 64.0F, 4.0F));
-         Module motionBlur = new Module("MotionBlur");
-         motionBlur.addSetting(ModuleSetting.slider("Strength", 0.5F, 0.1F, 0.9F, 0.05F));
-         Module hitEffects = new Module("HitEffects");
-         Module noRender = new Module("NoRender");
-         noRender.addSetting(ModuleSetting.toggle("Fire", true));
-         noRender.addSetting(ModuleSetting.toggle("Pumpkin", true));
-         noRender.addSetting(ModuleSetting.toggle("Totem", true));
-         noRender.addSetting(ModuleSetting.toggle("Fog", true));
-         noRender.addSetting(ModuleSetting.toggle("Blindness", true));
-         Module freecam = new Module("Freecam");
-         freecam.addSetting(ModuleSetting.slider("Speed", 1.0F, 0.1F, 5.0F, 0.1F));
-         Module waypoints = new Module("Waypoints");
-         Module fog = new Module("Fog");
-         fog.addSetting(ModuleSetting.choice("Color", new String[]{"White", "Light Blue", "Purple", "Red", "Green", "Dark", "Golden"}, 0));
-         fog.addSetting(ModuleSetting.slider("Density", 0.5F, 0.0F, 1.0F, 0.1F));
-         Module aspectRatio = new Module("AspectRatio");
-         aspectRatio.addSetting(ModuleSetting.slider("FOV Scale", 1.33F, 1.0F, 2.0F, 0.01F));
-         Module breadcrumbs = new Module("Breadcrumbs");
-         Module storageESP = new Module("StorageESP");
-         storageESP.addSetting(ModuleSetting.toggle("Chests", true));
-         storageESP.addSetting(ModuleSetting.toggle("Ender Chests", true));
-         storageESP.addSetting(ModuleSetting.toggle("Shulkers", true));
-         Category render = new Category("Render", 0.0F, 0.0F);
-         render.addModule(esp);
-         render.addModule(tracers);
-         render.addModule(nametags);
-         render.addModule(chams);
-         render.addModule(fullBright);
-         render.addModule(xray);
-         render.addModule(blockOverlay);
-         render.addModule(blockEsp);
-         render.addModule(motionBlur);
-         render.addModule(hitEffects);
-         render.addModule(noRender);
-         render.addModule(freecam);
-         render.addModule(waypoints);
-         render.addModule(fog);
-         render.addModule(aspectRatio);
-         render.addModule(breadcrumbs);
-         render.addModule(storageESP);
-         this.categories.add(render);
-         Module autoFish = new Module("AutoFish", autoFishOn, autoFishOff);
-         Module noRotate = new Module("NoRotate");
-         Module fastPlace = new Module("FastPlace");
-         fastPlace.addSetting(ModuleSetting.slider("Delay", 0.0F, 0.0F, 4.0F, 1.0F));
-         Module fastBreak = new Module("FastBreak");
-         fastBreak.addSetting(ModuleSetting.slider("Multiplier", 1.5F, 1.0F, 5.0F, 0.1F));
-         Module autoTool = new Module("AutoTool");
-         Module scaffold = new Module("Scaffold");
-         scaffold.addSetting(ModuleSetting.choice("Mode", new String[]{"Normal", "Expand", "Tower"}, 0));
-         scaffold.addSetting(ModuleSetting.toggle("Safe Walk", true));
-         Module timer = new Module("Timer");
-         timer.addSetting(ModuleSetting.slider("Speed", 1.0F, 0.1F, 5.0F, 0.1F));
-         Module blink = new Module("Blink");
-         Module antiHunger = new Module("AntiHunger");
-         Module autoEat = new Module("AutoEat");
-         autoEat.addSetting(ModuleSetting.slider("Health", 10.0F, 1.0F, 19.0F, 1.0F));
-         Module chestStealer = new Module("ChestStealer");
-         chestStealer.addSetting(ModuleSetting.slider("Delay", 50.0F, 0.0F, 500.0F, 25.0F));
-         Module inventoryCleaner = new Module("InvCleaner");
-         Module autoRespawn = new Module("AutoRespawn");
-         Module pingSpoof = new Module("PingSpoof");
-         pingSpoof.addSetting(ModuleSetting.slider("Ping", 100.0F, 0.0F, 1000.0F, 50.0F));
-         Module skinBlink = new Module("SkinBlink");
-         Module autoDisconnect = new Module("AutoLeave");
-         autoDisconnect.addSetting(ModuleSetting.slider("Health", 5.0F, 1.0F, 19.0F, 1.0F));
-         Category player = new Category("Player", 0.0F, 0.0F);
-         player.addModule(autoFish);
-         player.addModule(noRotate);
-         player.addModule(fastPlace);
-         player.addModule(fastBreak);
-         player.addModule(autoTool);
-         player.addModule(scaffold);
-         player.addModule(timer);
-         player.addModule(blink);
-         player.addModule(antiHunger);
-         player.addModule(autoEat);
-         player.addModule(chestStealer);
-         player.addModule(inventoryCleaner);
-         player.addModule(autoRespawn);
-         player.addModule(pingSpoof);
-         player.addModule(skinBlink);
-         player.addModule(autoDisconnect);
-         this.categories.add(player);
-         Module warden = new Module("Warden", wardenOn, wardenOff);
-         Module baseFinder = new Module("BaseFinder", baseFinderOn, baseFinderOff);
-         baseFinder.addSetting(ModuleSetting.slider("Radius", 64.0F, 16.0F, 128.0F, 16.0F));
-         Module nuker = new Module("Nuker");
-         nuker.addSetting(ModuleSetting.slider("Radius", 4.0F, 1.0F, 6.0F, 1.0F));
-         nuker.addSetting(ModuleSetting.choice("Mode", new String[]{"All", "Flat", "Smash"}, 0));
-         Module autoSign = new Module("AutoSign");
-         Module fucker = new Module("Fucker");
-         fucker.addSetting(ModuleSetting.choice("Block", new String[]{"Bed", "Cake", "Spawner", "Egg"}, 0));
-         Module autoFarm = new Module("AutoFarm", autoFarmOn, autoFarmOff);
-         autoFarm.addSetting(ModuleSetting.slider("Radius", 4.0F, 2.0F, 8.0F, 1.0F));
-         Module autoMine = new Module("AutoMine", autoMineOn, autoMineOff);
-         autoMine.addSetting(ModuleSetting.choice("Ore", new String[]{"Diamond", "Emerald", "Gold", "Iron", "Netherite", "All Ores"}, 0));
          Module apple = new Module("Apple", appleOn, appleOff);
+         apple.addSetting(ModuleSetting.toggle("Notify", true));
          Module dig = new Module("Dig", digOn, digOff);
-         Module tunneller = new Module("Tunneller");
-         tunneller.addSetting(ModuleSetting.choice("Size", new String[]{"1x2", "2x2", "3x3"}, 0));
-         Module veinMiner = new Module("VeinMiner");
-         Category world = new Category("World", 0.0F, 0.0F);
-         world.addModule(warden);
-         world.addModule(baseFinder);
-         world.addModule(nuker);
-         world.addModule(autoSign);
-         world.addModule(fucker);
-         world.addModule(autoFarm);
-         world.addModule(autoMine);
-         world.addModule(apple);
-         world.addModule(dig);
-         world.addModule(tunneller);
-         world.addModule(veinMiner);
-         this.categories.add(world);
-         Module disabler = new Module("Disabler");
-         disabler.addSetting(ModuleSetting.choice("Mode", new String[]{"FunTime", "Matrix", "Vulcan", "Grim"}, 0));
-         Module fastBow = new Module("FastBow");
-         Module ghostHand = new Module("GhostHand");
-         Module packetMine = new Module("PacketMine");
-         Module autoGapple = new Module("AutoGapple");
-         Module portalGodMode = new Module("PortalGod");
-         Module tpAura = new Module("TPAura");
-         tpAura.addSetting(ModuleSetting.slider("Range", 8.0F, 3.0F, 32.0F, 1.0F));
-         Module boatFly = new Module("BoatFly");
-         boatFly.addSetting(ModuleSetting.slider("Speed", 2.0F, 0.5F, 10.0F, 0.5F));
-         Module nameProtect = new Module("NameProtect");
-         Module serverCrasher = new Module("Crasher");
-         serverCrasher.addSetting(ModuleSetting.choice("Mode", new String[]{"Packet", "Book", "Movement"}, 0));
-         Category exploit = new Category("Exploit", 0.0F, 0.0F);
-         exploit.addModule(disabler);
-         exploit.addModule(fastBow);
-         exploit.addModule(ghostHand);
-         exploit.addModule(packetMine);
-         exploit.addModule(autoGapple);
-         exploit.addModule(portalGodMode);
-         exploit.addModule(tpAura);
-         exploit.addModule(boatFly);
-         exploit.addModule(nameProtect);
-         exploit.addModule(serverCrasher);
-         this.categories.add(exploit);
-         Module autoCraft = new Module("AutoCraft", autoCraftOn, autoCraftOff);
-         autoCraft.addSetting(ModuleSetting.choice("Recipe", new String[]{"Planks", "Sticks", "Torches", "Bread", "Golden Apple"}, 0));
-         Module autoSell = new Module("AutoSell", autoSellOn, autoSellOff);
-         autoSell.addSetting(ModuleSetting.choice("Mode", new String[]{"Buyer", "Junk Only", "Sell All"}, 0));
-         autoSell.addSetting(ModuleSetting.slider("Interval", 30.0F, 10.0F, 120.0F, 5.0F));
-         Module autoBuy = new Module("AutoBuy", autoBuyOn, autoBuyOff);
-         autoBuy.addSetting(
-            ModuleSetting.choice("Item", new String[]{"Diamond", "Emerald", "Netherite", "God Apple", "Elytra", "Totem", "Shulker", "Beacon"}, 0)
-         );
-         autoBuy.addSetting(ModuleSetting.slider("Max Price", 10000.0F, 100.0F, 100000.0F, 500.0F));
-         autoBuy.addSetting(ModuleSetting.slider("Interval", 10.0F, 3.0F, 60.0F, 1.0F));
-         autoBuy.addSetting(ModuleSetting.choice("Search", new String[]{"Browse /ah", "Search /ah search"}, 1));
+         dig.addSetting(ModuleSetting.toggle("Use Baritone", true));
+         Module clan = new Module("Clan", clanOn, clanOff);
+         clan.addSetting(ModuleSetting.toggle("Notify", true));
          Module autoEvent = new Module("AutoEvent");
-         autoEvent.addSetting(ModuleSetting.toggle("Auto Join", true));
-         Module salary = new Module("Salary");
-         salary.addSetting(ModuleSetting.slider("Interval", 60.0F, 30.0F, 300.0F, 10.0F));
-         Category funtime = new Category("FunTime", 0.0F, 0.0F);
-         funtime.addModule(autoCraft);
-         funtime.addModule(autoSell);
-         funtime.addModule(autoBuy);
-         funtime.addModule(autoEvent);
-         funtime.addModule(salary);
-         this.categories.add(funtime);
+         autoEvent.addSetting(ModuleSetting.toggle("Auto Refresh", true));
+         Category modules = new Category("Modules", 0.0F, 0.0F);
+         modules.addModule(apple);
+         modules.addModule(dig);
+         modules.addModule(clan);
+         modules.addModule(autoEvent);
+         this.categories.add(modules);
+
          Module hudOptions = new Module("HUDOptions");
          hudOptions.addSetting(ModuleSetting.toggle("Watermark", true));
          hudOptions.addSetting(ModuleSetting.toggle("ArrayList", true));
@@ -389,9 +108,11 @@ public class ClickGuiScreen extends Screen {
          hudOptions.addSetting(ModuleSetting.toggle("Time", false));
          hudOptions.addSetting(ModuleSetting.toggle("TargetHUD", true));
          hudOptions.addSetting(ModuleSetting.toggle("Music", true));
+         hudOptions.setEnabled(true);
          Category hud = new Category("HUD", 0.0F, 0.0F);
          hud.addModule(hudOptions);
          this.categories.add(hud);
+
          Module menuStyle = new Module("MenuStyle");
          menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen", "Tabs", "Compact", "Cards"}, 0));
          Category settings = new Category("Settings", 0.0F, 0.0F);
@@ -497,7 +218,6 @@ public class ClickGuiScreen extends Screen {
       int rowY = 8 + (int)((1.0F - alpha) * -10.0F);
       int alphaByte = (int)(alpha * 200.0F);
       RoundedRectRenderer.draw(context, rowX, rowY, rowW, rowH, 6, alphaByte << 24 | 0x080808);
-      RoundedRectRenderer.draw(context, rowX, rowY, 2, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
       int logoX = rowX + 14;
       int logoY = rowY + rowH / 2 - logoSize / 2;
       context.drawTexture(
@@ -782,7 +502,6 @@ public class ClickGuiScreen extends Screen {
          btn.updateHover(hovered);
          if (mod.isEnabled()) {
             RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, (int)(68.0F * alpha) << 24 | accent.textColor & 16777215);
-            RoundedRectRenderer.draw(context, cx + 3, y + 1, 2, 16, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
          } else if (btn.hoverAmount > 0.01F) {
             int hAlpha = (int)(btn.hoverAmount * 32.0F * alpha);
             RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, hAlpha << 24 | 16777215);
@@ -1256,9 +975,6 @@ public class ClickGuiScreen extends Screen {
          int textColor = selected ? -1 : -3355444;
          int labelW = this.textRenderer.getWidth(this.styledText(cat.getName()));
          this.drawStyledText(context, cat.getName(), tx + tw / 2 - labelW / 2, ty + tabH / 2 - this.textRenderer.fontHeight / 2, textColor);
-         if (selected) {
-            RoundedRectRenderer.draw(context, tx + 6, ty + tabH - 2, tw - 12, 2, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
-         }
          tx += tw + gap;
       }
 
@@ -1454,8 +1170,6 @@ public class ClickGuiScreen extends Screen {
       int w = COMPACT_PANEL_W;
       int h = this.compactPanelH();
       this.drawPanelBg(context, sx, sy, w, h, accent);
-
-      RoundedRectRenderer.draw(context, sx, sy, 2, h, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
       this.drawBrandRow(context, sx, sy, COMPACT_HEADER_H, accent);
       RoundedRectRenderer.draw(context, sx + 6, sy + COMPACT_HEADER_H, w - 12, 1, 0, 0x30FFFFFF);
 
@@ -1619,7 +1333,6 @@ public class ClickGuiScreen extends Screen {
       int brandX = (this.width - brandW) / 2;
       int brandY = this.cardsGridY() - brandH - 12 + (int)((1.0F - alpha) * -10.0F);
       this.drawPanelBg(context, brandX, brandY, brandW, brandH, accent);
-      RoundedRectRenderer.draw(context, brandX, brandY, 2, brandH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
       this.drawBrandRow(context, brandX, brandY, brandH, accent);
 
       int gx = this.cardsGridX();
@@ -1633,7 +1346,6 @@ public class ClickGuiScreen extends Screen {
          int y = gy + row * (CARDS_H + CARDS_GAP) + cardSlide;
          boolean hovered = mouseX >= x && mouseX <= x + CARDS_W && mouseY >= y && mouseY < y + CARDS_H;
          this.drawPanelBg(context, x, y, CARDS_W, CARDS_H, accent);
-         RoundedRectRenderer.draw(context, x, y, 2, CARDS_H, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
          if (hovered) {
             RoundedRectRenderer.draw(context, x, y, CARDS_W, CARDS_H, 8, 0x18FFFFFF);
          }
@@ -1648,11 +1360,7 @@ public class ClickGuiScreen extends Screen {
          String sub = enabledCount + " / " + cat.getModules().size() + " enabled";
          int subW = this.textRenderer.getWidth(this.styledText(sub));
          this.drawStyledText(context, sub, x + CARDS_W / 2 - subW / 2, y + CARDS_H - 18, accent.textColor);
-         if (enabledCount > 0) {
-            int barW = (int)((float)(CARDS_W - 24) * ((float)enabledCount / (float)Math.max(1, cat.getModules().size())));
-            RoundedRectRenderer.draw(context, x + 12, y + CARDS_H - 28, CARDS_W - 24, 2, 1, 0x40FFFFFF);
-            RoundedRectRenderer.draw(context, x + 12, y + CARDS_H - 28, barW, 2, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
-         }
+
       }
 
       if (this.cardsOpenCategory >= 0 && this.cardsOpenCategory < this.categories.size()) {
@@ -1662,7 +1370,6 @@ public class ClickGuiScreen extends Screen {
          int ox = (this.width - ow) / 2;
          int oy = (this.height - oh) / 2;
          this.drawPanelBg(context, ox, oy, ow, oh, accent);
-         RoundedRectRenderer.draw(context, ox, oy, 2, oh, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
          Category openCat = this.categories.get(this.cardsOpenCategory);
          this.drawBrandRow(context, ox, oy, 30, accent);
          int brandRowW = this.brandRowWidth(20);

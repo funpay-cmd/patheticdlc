@@ -1,5 +1,6 @@
 package com.pathdlc.digger.hud;
 
+import com.pathdlc.digger.event.AutoEventBot;
 import com.pathdlc.digger.gui.GuiSettings;
 import com.pathdlc.digger.gui.Module;
 import com.pathdlc.digger.gui.ModuleManager;
@@ -122,12 +123,72 @@ public final class HudRenderer {
       if (widgetEnabled("TargetHUD", true)) {
          renderTargetHud(context, tr, accent, sw, sh, client);
       }
+
+      if (ModuleManager.isEnabled("AutoEvent")) {
+         renderAutoEvent(context, tr, accent, sw);
+      }
+   }
+
+   private static void renderAutoEvent(DrawContext context, TextRenderer tr, GuiSettings.AccentColor accent, int sw) {
+      List<AutoEventBot.EventEntry> events = AutoEventBot.snapshot();
+      if (events.isEmpty()) {
+         return;
+      }
+      events.sort(Comparator.comparingLong(e -> e.startEpochMs <= 0L ? Long.MAX_VALUE : e.startEpochMs));
+
+      int rowH = tr.fontHeight + PAD_Y * 2;
+      int padding = 10;
+      int headerH = tr.fontHeight + PAD_Y * 2;
+      int totalH = headerH + events.size() * rowH + padding;
+
+      int maxRowW = 0;
+      String[][] cells = new String[events.size()][3];
+      for (int i = 0; i < events.size(); i++) {
+         AutoEventBot.EventEntry e = events.get(i);
+         double dist = AutoEventBot.distance(e);
+         cells[i][0] = e.name;
+         cells[i][1] = dist >= 0.0 ? String.format("%dm", (int) Math.round(dist)) : "--";
+         cells[i][2] = AutoEventBot.formatCountdown(e);
+         int w = tr.getWidth(styledText(cells[i][0])) + tr.getWidth(styledText(cells[i][1])) + tr.getWidth(styledText(cells[i][2])) + 60;
+         if (w > maxRowW) {
+            maxRowW = w;
+         }
+      }
+      int headerLabelW = tr.getWidth(styledText("Events on FunTime"));
+      int rowW = Math.max(maxRowW, headerLabelW + 32);
+      int x = sw / 2 - rowW / 2;
+      int y = MARGIN + 4;
+
+      RoundedRectRenderer.draw(context, x, y, rowW, totalH, 6, 0xCC1A0A0F);
+
+      int textY = y + PAD_Y;
+      context.drawText(tr, styledText("Events on FunTime"), x + PAD_X, textY, 0xFFFFFFFF, true);
+      context.fill(x + 4, y + headerH, x + rowW - 4, y + headerH + 1, 0x40FFFFFF);
+
+      int rowY = y + headerH + 2;
+      for (int i = 0; i < events.size(); i++) {
+         Text name = styledText(cells[i][0]);
+         Text dist = styledText(cells[i][1]);
+         Text countdown = styledText(cells[i][2]);
+         int distW = tr.getWidth(dist);
+         int cdW = tr.getWidth(countdown);
+         int rowTextY = rowY + rowH / 2 - tr.fontHeight / 2;
+         context.drawText(tr, name, x + PAD_X, rowTextY, 0xFFFFFFFF, true);
+         int countdownX = x + rowW - PAD_X - cdW;
+         int distX = countdownX - 12 - distW;
+         context.drawText(tr, dist, distX, rowTextY, 0xFFAAAAAA, true);
+         context.drawText(tr, countdown, countdownX, rowTextY, accent.textColor, true);
+         rowY += rowH;
+      }
    }
 
    private static boolean widgetEnabled(String name, boolean defaultValue) {
       Module m = ModuleManager.get("HUDOptions");
       if (m == null) {
          return defaultValue;
+      }
+      if (!m.isEnabled()) {
+         return false;
       }
       ModuleSetting s = m.getSetting(name);
       return s != null ? s.getBool() : defaultValue;
@@ -140,7 +201,6 @@ public final class HudRenderer {
       int rowW = PAD_X * 2 + LOGO_SIZE + LOGO_TEXT_GAP + textW;
 
       RoundedRectRenderer.draw(context, x, y, rowW, rowH, 4, 0xC01A0A0F);
-      RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int logoY = y + rowH / 2 - LOGO_SIZE / 2;
       int logoX = x + PAD_X;
@@ -170,7 +230,6 @@ public final class HudRenderer {
       int rowW = textW + PAD_X * 2;
 
       RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
-      RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int textX = x + PAD_X;
       int textY = y + rowH / 2 - tr.fontHeight / 2;
@@ -186,7 +245,6 @@ public final class HudRenderer {
       int x = rightX - rowW;
 
       RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
-      RoundedRectRenderer.draw(context, x + rowW - STRIPE_W, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int textX = x + PAD_X;
       int textY = y + rowH / 2 - tr.fontHeight / 2;
@@ -211,13 +269,10 @@ public final class HudRenderer {
       for (Module m : enabled) {
          Text label = styledText(m.getName());
          int textW = tr.getWidth(label);
-         int rowW = textW + PAD_X * 2 + STRIPE_W;
+         int rowW = textW + PAD_X * 2;
          int x = screenW - rowW - MARGIN;
 
          RoundedRectRenderer.draw(context, x, y, rowW, rowH, 3, 0xC01A0A0F);
-         int stripeColor = 0xFF000000 | (accent.textColor & 0xFFFFFF);
-         RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, stripeColor);
-         RoundedRectRenderer.draw(context, x + rowW - STRIPE_W, y, STRIPE_W, rowH, 1, stripeColor);
 
          int textX = x + PAD_X;
          int textY = y + rowH / 2 - tr.fontHeight / 2;
@@ -250,7 +305,6 @@ public final class HudRenderer {
       int y = sh - rowH - 60;
 
       RoundedRectRenderer.draw(context, x, y, rowW, rowH, 5, 0xCC1A0A0F);
-      RoundedRectRenderer.draw(context, x, y, STRIPE_W, rowH, 1, 0xFF000000 | (accent.textColor & 0xFFFFFF));
 
       int avatarSize = logoSize;
       int avatarX = x + PAD_X;
