@@ -125,6 +125,8 @@ public final class HudRenderer {
    }
 
    private static Text styledText(String s) {
-      return Text.literal(s).styled(style -> style.withFont(CUSTOM_FONT));
+      return GuiSettings.isCustomFontEnabled()
+         ? Text.literal(s).styled(style -> style.withFont(CUSTOM_FONT))
+         : Text.literal(s);
    }
 }
