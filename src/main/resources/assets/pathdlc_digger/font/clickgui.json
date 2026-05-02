@@ -2,7 +2,7 @@
   "providers": [
     {
       "type": "ttf",
-      "file": "pathdlc_digger:inter-medium.ttf",
+      "file": "pathdlc_digger:manrope-medium.ttf",
       "shift": [0, 1.0],
       "size": 10.5,
       "oversample": 4.0

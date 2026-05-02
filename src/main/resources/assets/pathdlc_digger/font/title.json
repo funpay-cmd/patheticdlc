@@ -2,7 +2,7 @@
   "providers": [
     {
       "type": "ttf",
-      "file": "pathdlc_digger:inter-semibold.ttf",
+      "file": "pathdlc_digger:manrope-extrabold.ttf",
       "shift": [0, 1.0],
       "size": 12.0,
       "oversample": 4.0
