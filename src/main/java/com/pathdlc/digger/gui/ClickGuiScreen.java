@@ -380,6 +380,18 @@ public class ClickGuiScreen extends Screen {
          funtime.addModule(autoEvent);
          funtime.addModule(salary);
          this.categories.add(funtime);
+         Module hudOptions = new Module("HUDOptions");
+         hudOptions.addSetting(ModuleSetting.toggle("Watermark", true));
+         hudOptions.addSetting(ModuleSetting.toggle("ArrayList", true));
+         hudOptions.addSetting(ModuleSetting.toggle("FPS", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Ping", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Coords", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Time", false));
+         hudOptions.addSetting(ModuleSetting.toggle("TargetHUD", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Music", true));
+         Category hud = new Category("HUD", 0.0F, 0.0F);
+         hud.addModule(hudOptions);
+         this.categories.add(hud);
          Module menuStyle = new Module("MenuStyle");
          menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen", "Tabs", "Compact", "Cards"}, 0));
          Category settings = new Category("Settings", 0.0F, 0.0F);
@@ -1366,7 +1378,7 @@ public class ClickGuiScreen extends Screen {
          if (mod.isSettingsExpanded() && mod.hasSettings()) {
             for (ModuleSetting setting : mod.getSettings()) {
                if (mouseY >= rowY && mouseY < rowY + 16) {
-                  this.handleDogenSettingClick(setting, contentX + 4, contentW - 8, rowY, mouseX);
+                  this.handleSettingClick(setting, contentX + 4, rowY, mouseX);
                   return true;
                }
                rowY += 16;
@@ -1544,7 +1556,7 @@ public class ClickGuiScreen extends Screen {
                if (mod.isSettingsExpanded() && mod.hasSettings()) {
                   for (ModuleSetting setting : mod.getSettings()) {
                      if (mouseY >= y && mouseY < y + 16) {
-                        this.handleDogenSettingClick(setting, sx + 8, w - 16, y, mouseX);
+                        this.handleSettingClick(setting, sx + 8, y, mouseX);
                         return true;
                      }
                      y += 16;
@@ -1736,7 +1748,7 @@ public class ClickGuiScreen extends Screen {
             if (mod.isSettingsExpanded() && mod.hasSettings()) {
                for (ModuleSetting setting : mod.getSettings()) {
                   if (mouseY >= rowY && mouseY < rowY + 16) {
-                     this.handleDogenSettingClick(setting, ox + 4, ow - 8, rowY, mouseX);
+                     this.handleSettingClick(setting, ox + 4, rowY, mouseX);
                      return true;
                   }
                   rowY += 16;
