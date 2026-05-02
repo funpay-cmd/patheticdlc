@@ -79,6 +79,7 @@ public class PathDlcDiggerClient implements ClientModInitializer {
                   }
 
                   client.setScreen(clickGui);
+                  com.pathdlc.digger.sound.ClientSounds.play(com.pathdlc.digger.sound.ClientSounds.CLICKGUI_OPEN, 0.65F, 1.0F);
                }
 
                DIGGER.tick(client);

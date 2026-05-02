@@ -163,8 +163,12 @@ public class ClickGuiScreen extends Screen {
 
          Module menuStyle = new Module("MenuStyle");
          menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen", "Tabs", "Compact", "Cards"}, 0));
+         Module sounds = new Module("Sounds");
+         sounds.addSetting(ModuleSetting.slider("Volume", 0.6F, 0.0F, 1.0F, 0.05F));
+         sounds.setEnabled(true);
          Category settings = new Category("Settings", 0.0F, 0.0F);
          settings.addModule(menuStyle);
+         settings.addModule(sounds);
          this.categories.add(settings);
 
          for (Category cat : this.categories) {

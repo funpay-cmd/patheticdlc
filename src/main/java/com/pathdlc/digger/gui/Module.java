@@ -69,6 +69,7 @@ public class Module {
       if (!this.enabled && this.onDisable != null) {
          this.onDisable.run();
       }
+      com.pathdlc.digger.sound.ClientSounds.play(com.pathdlc.digger.sound.ClientSounds.TOGGLE, 0.55F, this.enabled ? 1.05F : 0.95F);
    }
 
    public Module addSetting(ModuleSetting setting) {
