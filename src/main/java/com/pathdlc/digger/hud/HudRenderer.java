@@ -435,14 +435,24 @@ public final class HudRenderer {
    }
 
    private static String currentMusicLabel(MinecraftClient client) {
-      if (musicReflectionFailed) {
-         return null;
-      }
       long frame = PerformanceSettings.getFrameCounter();
       if (lastMusicLookup >= 0L && frame - lastMusicLookup < MUSIC_REFRESH_FRAMES) {
          return cachedMusicLabel;
       }
       lastMusicLookup = frame;
+
+      // Prefer system-wide media (Spotify, browser-tab YouTube, VLC, etc.).
+      String system = SystemMediaTracker.currentTrack();
+      if (system != null && !system.isEmpty()) {
+         cachedMusicLabel = system;
+         return cachedMusicLabel;
+      }
+
+      // Fallback: vanilla Minecraft music via reflection on MusicTracker.
+      if (musicReflectionFailed) {
+         cachedMusicLabel = null;
+         return null;
+      }
       try {
          MusicTracker tracker = client.getMusicTracker();
          if (tracker == null) {
