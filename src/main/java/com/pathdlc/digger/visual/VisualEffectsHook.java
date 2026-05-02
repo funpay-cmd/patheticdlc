@@ -164,6 +164,14 @@ public final class VisualEffectsHook {
             pitch = ps.getFloat();
          }
       }
+      // Custom sounds from the bundled FeverVisual pack take priority; vanilla
+      // events stay as a fallback for users who prefer the original options.
+      net.minecraft.util.Identifier customId = customSoundId(choice);
+      if (customId != null) {
+         mc.getSoundManager().play(net.minecraft.client.sound.PositionedSoundInstance.master(
+               net.minecraft.sound.SoundEvent.of(customId), pitch, volume));
+         return;
+      }
       SoundEvent sound;
       switch (choice) {
          case "Bell":
@@ -184,6 +192,25 @@ public final class VisualEffectsHook {
             break;
       }
       mc.player.playSound(sound, volume, pitch);
+   }
+
+   private static net.minecraft.util.Identifier customSoundId(String choice) {
+      if (choice == null) {
+         return null;
+      }
+      switch (choice) {
+         case "Bonk":     return net.minecraft.util.Identifier.of("pathdlc_digger", "bonk");
+         case "Punch":    return net.minecraft.util.Identifier.of("pathdlc_digger", "punch");
+         case "Critical": return net.minecraft.util.Identifier.of("pathdlc_digger", "critical");
+         case "ApplePay": return net.minecraft.util.Identifier.of("pathdlc_digger", "applepay");
+         case "Frag":     return net.minecraft.util.Identifier.of("pathdlc_digger", "frag");
+         case "Bass":     return net.minecraft.util.Identifier.of("pathdlc_digger", "bass");
+         case "Chime":    return net.minecraft.util.Identifier.of("pathdlc_digger", "chime");
+         case "Beep":     return net.minecraft.util.Identifier.of("pathdlc_digger", "beeep");
+         case "Clock":    return net.minecraft.util.Identifier.of("pathdlc_digger", "clock");
+         case "UwU":      return net.minecraft.util.Identifier.of("pathdlc_digger", "uwu");
+         default:         return null;
+      }
    }
 
    private static void spawnJumpCircle(ClientWorld world, ClientPlayerEntity player) {

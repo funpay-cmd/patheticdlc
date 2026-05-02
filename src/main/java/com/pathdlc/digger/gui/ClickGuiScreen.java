@@ -116,7 +116,10 @@ public class ClickGuiScreen extends Screen {
          Module hitParticles = new Module("HitParticles");
          hitParticles.addSetting(ModuleSetting.choice("Type", particleChoices, 0));
          Module hitSound = new Module("HitSound");
-         hitSound.addSetting(ModuleSetting.choice("Sound", new String[]{"BitClick", "Bell", "Snap", "Wood", "Anvil"}, 0));
+         hitSound.addSetting(ModuleSetting.choice("Sound",
+               new String[]{"Bonk", "Punch", "Critical", "ApplePay", "Frag", "Bass",
+                            "Chime", "Beep", "Clock", "UwU",
+                            "BitClick", "Bell", "Snap", "Wood", "Anvil"}, 0));
          hitSound.addSetting(ModuleSetting.slider("Volume", 0.6F, 0.0F, 1.0F, 0.05F));
          hitSound.addSetting(ModuleSetting.slider("Pitch", 1.0F, 0.5F, 2.0F, 0.1F));
          Module customFog = new Module("CustomFog");
