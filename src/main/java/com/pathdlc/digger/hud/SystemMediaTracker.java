@@ -32,6 +32,11 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class SystemMediaTracker {
    private static final long POLL_INTERVAL_MS = 1500L;
    private static final long PROCESS_TIMEOUT_MS = 2500L;
+   /** Number of consecutive empty/error polls before a probe is permanently
+    *  disabled.  Has to be high enough to absorb a slow PowerShell cold-start
+    *  and the occasional WinRT/MPRIS hiccup, but low enough that a missing
+    *  binary does not keep spawning processes for the entire session. */
+   private static final int MAX_CONSECUTIVE_FAILURES = 5;
 
    private static final AtomicReference<String> CURRENT = new AtomicReference<>(null);
    private static volatile boolean started = false;
@@ -216,6 +221,7 @@ public final class SystemMediaTracker {
 
       private final String encodedCommand;
       private volatile boolean broken = false;
+      private volatile int consecutiveFailures = 0;
 
       WindowsSmtcProbe() {
          this.encodedCommand = Base64.getEncoder().encodeToString(SCRIPT.getBytes(StandardCharsets.UTF_16LE));
@@ -234,10 +240,15 @@ public final class SystemMediaTracker {
                "-EncodedCommand", encodedCommand
          ));
          if (result == null) {
-            // PowerShell missing or blocked: do not retry forever.
-            broken = true;
+            // Could be missing powershell, slow cold-start, or a transient
+            // WinRT timeout — only give up after several misses in a row so
+            // a single slow probe does not kill music tracking forever.
+            if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+               broken = true;
+            }
             return null;
          }
+         consecutiveFailures = 0;
          return sanitize(result);
       }
    }
@@ -277,6 +288,7 @@ public final class SystemMediaTracker {
    /** Linux: rely on {@code playerctl} (D-Bus MPRIS). Common across distros. */
    private static final class LinuxMprisProbe implements Probe {
       private volatile boolean broken = false;
+      private volatile int consecutiveFailures = 0;
 
       @Override
       public String poll() {
@@ -290,9 +302,12 @@ public final class SystemMediaTracker {
                "{{ artist }} - {{ title }}"
          ));
          if (result == null) {
-            broken = true;
+            if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+               broken = true;
+            }
             return null;
          }
+         consecutiveFailures = 0;
          String trimmed = sanitize(result);
          if (trimmed == null || trimmed.equals("-") || trimmed.startsWith("- ")) {
             return null;
