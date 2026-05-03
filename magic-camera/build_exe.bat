@@ -23,6 +23,7 @@ if errorlevel 1 (
 
 echo.
 echo [2/4] Detecting mediapipe path...
+set "MP_PATH="
 for /f "tokens=*" %%i in ('python -c "import mediapipe, os; print(os.path.dirname(mediapipe.__file__))"') do set MP_PATH=%%i
 
 if "%MP_PATH%"=="" (
