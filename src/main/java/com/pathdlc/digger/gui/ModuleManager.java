@@ -1,5 +1,7 @@
 package com.pathdlc.digger.gui;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -17,6 +19,10 @@ public final class ModuleManager {
    public static boolean isEnabled(String name) {
       Module m = get(name);
       return m != null && m.isEnabled();
+   }
+
+   public static Collection<Module> values() {
+      return Collections.unmodifiableCollection(modules.values());
    }
 
    private ModuleManager() {

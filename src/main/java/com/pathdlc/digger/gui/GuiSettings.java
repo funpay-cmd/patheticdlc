@@ -2,7 +2,7 @@ package com.pathdlc.digger.gui;
 
 public class GuiSettings {
    private static GuiSettings.Layout layout = GuiSettings.Layout.COLUMNS;
-   private static GuiSettings.AccentColor accentColor = GuiSettings.AccentColor.BLUE;
+   private static GuiSettings.AccentColor accentColor = GuiSettings.AccentColor.RED;
    private static boolean customFontEnabled = false;
 
    public static GuiSettings.Layout getLayout() {
@@ -38,13 +38,13 @@ public class GuiSettings {
    }
 
    public static enum AccentColor {
-      BLUE("Blue", 0.3F, 0.6F, 1.0F, -7816193),
-      PURPLE("Purple", 0.6F, 0.3F, 1.0F, -5601025),
-      GREEN("Green", 0.3F, 1.0F, 0.5F, -7798870),
-      RED("Red", 1.0F, 0.3F, 0.3F, -30584),
+      RED("Red", 0.882F, 0.114F, 0.282F, 0xFFE11D48),
       ORANGE("Orange", 1.0F, 0.6F, 0.2F, -17562),
       PINK("Pink", 1.0F, 0.3F, 0.7F, -30533),
-      CYAN("Cyan", 0.2F, 0.9F, 0.9F, -10031361);
+      PURPLE("Purple", 0.6F, 0.3F, 1.0F, -5601025),
+      BLUE("Blue", 0.3F, 0.6F, 1.0F, -7816193),
+      CYAN("Cyan", 0.2F, 0.9F, 0.9F, -10031361),
+      GREEN("Green", 0.3F, 1.0F, 0.5F, -7798870);
 
       private final String label;
       public final float r;

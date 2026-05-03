@@ -1,0 +1,15 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "pathdlc_digger:jetbrains-mono.ttf",
+      "shift": [0, 1.0],
+      "size": 9.5,
+      "oversample": 4.0
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
+    }
+  ]
+}

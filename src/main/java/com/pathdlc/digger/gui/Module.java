@@ -12,6 +12,24 @@ public class Module {
    private Runnable onDisable;
    private final List<ModuleSetting> settings = new ArrayList<>();
    private boolean settingsExpanded;
+   /**
+    * Animation progress for the on/off knob slide and the highlight panel
+    * fade.  Lerps toward isEnabled() at ~0.18 per render tick so the toggle
+    * feels alive without being slow.
+    */
+   public float enabledAnim;
+   /**
+    * Animation progress for the settings drawer expand/collapse.  Lerps
+    * toward isSettingsExpanded() so the row pushes neighbours down with a
+    * smooth ease.
+    */
+   public float expandedAnim;
+   /**
+    * Animation progress for module visibility in the ArrayList HUD widget
+    * and other fade-in surfaces.  Driven externally; modules just expose
+    * the float so the renderer can lerp it without re-allocating maps.
+    */
+   public float visibilityAnim;
 
    public Module(String name) {
       this.name = name;
@@ -39,6 +57,7 @@ public class Module {
 
    public void setEnabled(boolean enabled) {
       this.enabled = enabled;
+      this.enabledAnim = enabled ? 1.0F : 0.0F;
    }
 
    public void toggle() {
@@ -50,6 +69,7 @@ public class Module {
       if (!this.enabled && this.onDisable != null) {
          this.onDisable.run();
       }
+      com.pathdlc.digger.sound.ClientSounds.play(com.pathdlc.digger.sound.ClientSounds.TOGGLE, 0.55F, this.enabled ? 1.05F : 0.95F);
    }
 
    public Module addSetting(ModuleSetting setting) {

@@ -1,0 +1,25 @@
+{
+  "clickgui_open": { "sounds": [ "fevervisual:clickgui_open" ] },
+  "toggle": { "sounds": [ "fevervisual:toggle" ] },
+  "applepay": { "sounds": [ "fevervisual:applepay" ] },
+  "welcome": { "sounds": [ "fevervisual:welcome" ] },
+  "typing": { "sounds": [ "fevervisual:typing" ] },
+  "badtrip": { "sounds": [ "fevervisual:badtrip" ] },
+  "critical": { "sounds": [ "fevervisual:critical"] },
+
+  "glu": { "sounds": [ "fevervisual:glu"]},
+  "glu2": { "sounds": [ "fevervisual:glu2"]},
+  "punch": { "sounds": [ "fevervisual:punch"]},
+  "clock": { "sounds": [ "fevervisual:clock"]},
+  "bass": { "sounds": [ "fevervisual:bass"]},
+  "beeep": { "sounds": [ "fevervisual:beeep"]},
+  "uwu": { "sounds": [ "fevervisual:uwu"]},
+  "chime": { "sounds": [ "fevervisual:chime" ]},
+  "bonk": { "sounds": [ "fevervisual:bonk" ] },
+  "girl_1": {"sounds": [ "fevervisual:girl_1" ]},
+  "girl_2": {"sounds": [ "fevervisual:girl_2" ]},
+  "girl_3": {"sounds": [ "fevervisual:girl_3" ]},
+  "girl_4": {"sounds": [ "fevervisual:girl_4" ]},
+  "girl_5": {"sounds": [ "fevervisual:girl_5" ]},
+  "frag": {"sounds": [ "fevervisual:frag" ]}
+}

@@ -3,6 +3,7 @@ package com.pathdlc.digger.gui;
 import com.pathdlc.digger.render.LiquidGlassRenderer;
 import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.RoundedRectRenderer;
+import com.pathdlc.digger.gui.GuiSettings;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -14,6 +15,7 @@ import net.minecraft.client.gui.screen.world.SelectWorldScreen;
 
 public class CustomTitleScreen extends Screen {
    private static final Identifier BACKGROUND = Identifier.of("pathdlc_digger", "textures/gui/background.png");
+   private static final Identifier BACKGROUND_FEVER = Identifier.of("pathdlc_digger", "fever_assets/image/mainmenu/background.png");
    private static final int BTN_WIDTH = 220;
    private static final int BTN_HEIGHT = 28;
    private static final int BTN_GAP = 6;
@@ -32,7 +34,7 @@ public class CustomTitleScreen extends Screen {
    private final float[] pa = new float[40];
 
    public CustomTitleScreen() {
-      super(Text.literal("PathDLC"));
+      super(Text.literal("WareVisuals"));
    }
 
    protected void init() {
@@ -81,8 +83,21 @@ public class CustomTitleScreen extends Screen {
 
    private void renderBackground(DrawContext context) {
       context.fill(0, 0, this.width, this.height, -16382448);
-      context.drawTexture(RenderLayer::getGuiTextured, BACKGROUND, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
+      Identifier bg = pickBackground();
+      context.drawTexture(RenderLayer::getGuiTextured, bg, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
       context.fill(0, 0, this.width, this.height, -1442445808);
+   }
+
+   private static Identifier pickBackground() {
+      com.pathdlc.digger.gui.Module m = com.pathdlc.digger.gui.ModuleManager.get("MenuStyle");
+      if (m == null) {
+         return BACKGROUND;
+      }
+      com.pathdlc.digger.gui.ModuleSetting s = m.getSetting("Background");
+      if (s == null || s.getChoiceValue() == null) {
+         return BACKGROUND;
+      }
+      return "Fever".equalsIgnoreCase(s.getChoiceValue()) ? BACKGROUND_FEVER : BACKGROUND;
    }
 
    private void updateParticles() {
@@ -98,6 +113,7 @@ public class CustomTitleScreen extends Screen {
 
    private void renderParticles(DrawContext context) {
       int maxParticles = Math.min(40, PerformanceSettings.getParticleCount());
+      int rgb = GuiSettings.getAccentColor().textColor & 0xFFFFFF;
 
       for (int i = 0; i < maxParticles; i++) {
          int x = (int)this.px[i];
@@ -105,7 +121,7 @@ public class CustomTitleScreen extends Screen {
          int s = Math.max(1, (int)this.psz[i]);
          int a = (int)(this.pa[i] * 255.0F * this.openProgress);
          if (a >= 1) {
-            RoundedRectRenderer.draw(context, x, y, s * 2, s * 2, s, a << 24 | 10075135);
+            RoundedRectRenderer.draw(context, x, y, s * 2, s * 2, s, a << 24 | rgb);
          }
       }
    }
@@ -113,7 +129,7 @@ public class CustomTitleScreen extends Screen {
    private void renderTitle(DrawContext context, long elapsed) {
       float titleProgress = Math.min(1.0F, (float)elapsed / 600.0F) * this.openProgress;
       if (!(titleProgress < 0.01F)) {
-         String title = "PathDLC";
+         String title = "WareVisuals";
          int titleW = this.textRenderer.getWidth(title) * 3;
          int titleX = this.width / 2 - titleW / 6;
          int titleY = this.height / 2 - LABELS.length * 34 / 2 - 50;
@@ -121,10 +137,11 @@ public class CustomTitleScreen extends Screen {
          int glassH = 30;
          int glassX = this.width / 2 - glassW / 2;
          int glassY = titleY - 6;
+         GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
          if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
-            LiquidGlassRenderer.drawGlassPanel(context, (float)glassX, (float)glassY, (float)glassW, (float)glassH, 15.0F, 0.0F, 0.12F, 0.3F, 0.6F, 1.0F);
+            LiquidGlassRenderer.drawGlassPanel(context, (float)glassX, (float)glassY, (float)glassW, (float)glassH, 15.0F, 0.0F, 0.12F, accent.r, accent.g, accent.b);
          } else {
-            RoundedRectRenderer.draw(context, glassX, glassY, glassW, glassH, 15, -2012211152);
+            RoundedRectRenderer.draw(context, glassX, glassY, glassW, glassH, 15, 0x88180A0F);
          }
 
          int titleA = (int)(titleProgress * 255.0F);
@@ -134,7 +151,7 @@ public class CustomTitleScreen extends Screen {
          context.drawText(this.textRenderer, Text.literal(title), titleX / 3, titleY / 3, titleColor, true);
          context.getMatrices().pop();
          int subtitleA = (int)(titleProgress * 120.0F);
-         String subtitle = "Digger v1.21.4";
+         String subtitle = "v1.21.4 · Fabric";
          int subW = this.textRenderer.getWidth(subtitle);
          context.drawText(
             this.textRenderer, Text.literal(subtitle), this.width / 2 - subW / 2, titleY + 22, subtitleA << 24 | 8952268, false
@@ -159,30 +176,26 @@ public class CustomTitleScreen extends Screen {
             float hTarget = hovered ? 1.0F : 0.0F;
             this.btnHover[i] = this.btnHover[i] + (hTarget - this.btnHover[i]) * 0.15F;
             int drawX = cx + offsetX;
+            GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
+            int accentRgb = accent.textColor & 0xFFFFFF;
             if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
                LiquidGlassRenderer.drawGlassPanel(
-                  context, (float)drawX, (float)btnY, 220.0F, 28.0F, 14.0F, this.btnHover[i], 0.05F + this.btnHover[i] * 0.1F, 0.3F, 0.6F, 1.0F
+                  context, (float)drawX, (float)btnY, 220.0F, 28.0F, 14.0F, this.btnHover[i], 0.05F + this.btnHover[i] * 0.1F, accent.r, accent.g, accent.b
                );
             } else {
                int bgA = (int)(alphaF * (160.0F + 40.0F * this.btnHover[i]));
-               RoundedRectRenderer.draw(context, drawX, btnY, 220, 28, 14, bgA << 24 | 1054768);
+               RoundedRectRenderer.draw(context, drawX, btnY, 220, 28, 14, bgA << 24 | 0x180A0F);
             }
 
             if (this.btnHover[i] > 0.01F) {
                int glowA = (int)(this.btnHover[i] * 25.0F * alphaF);
-               RoundedRectRenderer.draw(context, drawX + 2, btnY + 2, 216, 24, 12, glowA << 24 | 4491468);
+               RoundedRectRenderer.draw(context, drawX + 2, btnY + 2, 216, 24, 12, glowA << 24 | accentRgb);
             }
 
             int textA = (int)(alphaF * 255.0F);
             int textColor = hovered ? textA << 24 | 16777215 : textA << 24 | 13426158;
             int labelW = this.textRenderer.getWidth(LABELS[i]);
             context.drawText(this.textRenderer, Text.literal(LABELS[i]), drawX + 110 - labelW / 2, btnY + 14 - 4, textColor, true);
-            if (this.btnHover[i] > 0.01F) {
-               int lineA = (int)(this.btnHover[i] * 100.0F * alphaF);
-               int lineW = (int)(192.0F * this.btnHover[i]);
-               int lineX = drawX + 110 - lineW / 2;
-               RoundedRectRenderer.draw(context, lineX, btnY + 28 - 3, lineW, 2, 1, lineA << 24 | 6724061);
-            }
          }
       }
    }
@@ -190,7 +203,7 @@ public class CustomTitleScreen extends Screen {
    private void renderFooter(DrawContext context) {
       int a = (int)(this.openProgress * 80.0F);
       int color = a << 24 | 6715272;
-      context.drawText(this.textRenderer, Text.literal("PathDLC Digger"), 6, this.height - 14, color, false);
+      context.drawText(this.textRenderer, Text.literal("WareVisuals"), 6, this.height - 14, color, false);
       String right = "Minecraft 1.21.4";
       int rw = this.textRenderer.getWidth(right);
       context.drawText(this.textRenderer, Text.literal(right), this.width - rw - 6, this.height - 14, color, false);

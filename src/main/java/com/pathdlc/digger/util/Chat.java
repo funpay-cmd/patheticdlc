@@ -13,7 +13,7 @@ public final class Chat {
       if (mc.player == null) {
          later(message);
       } else {
-         mc.player.sendMessage(Text.literal("§f[§bPathDLC§f] §7" + message), false);
+         mc.player.sendMessage(Text.literal("§f[§dWareVisuals§f] §7" + message), false);
       }
    }
 
@@ -22,7 +22,7 @@ public final class Chat {
       if (mc.player == null) {
          later(message);
       } else {
-         mc.player.sendMessage(Text.literal("§f[§bPathDLC§f] §e" + message), false);
+         mc.player.sendMessage(Text.literal("§f[§dWareVisuals§f] §e" + message), false);
       }
    }
 
@@ -31,7 +31,7 @@ public final class Chat {
       if (mc.player == null) {
          later(message);
       } else {
-         mc.player.sendMessage(Text.literal("§f[§bPathDLC§f] §c" + message), false);
+         mc.player.sendMessage(Text.literal("§f[§dWareVisuals§f] §c" + message), false);
       }
    }
 

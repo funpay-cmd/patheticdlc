@@ -10,10 +10,13 @@ public class ModuleSetting {
    private final float step;
    private final String[] choices;
    private int choiceIndex;
+   /** Animation progress for the toggle knob slide (TOGGLE settings only). */
+   public float toggleAnim;
 
    public static ModuleSetting toggle(String name, boolean defaultValue) {
       ModuleSetting s = new ModuleSetting(name, ModuleSetting.Type.TOGGLE, 0.0F, 1.0F, 1.0F, null);
       s.boolValue = defaultValue;
+      s.toggleAnim = defaultValue ? 1.0F : 0.0F;
       return s;
    }
 

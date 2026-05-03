@@ -1,5 +1,6 @@
 package com.pathdlc.digger.gui;
 
+import com.pathdlc.digger.render.Animations;
 import com.pathdlc.digger.render.LiquidGlassRenderer;
 import com.pathdlc.digger.render.PerformanceSettings;
 import com.pathdlc.digger.render.RoundedRectRenderer;
@@ -7,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.client.gui.DrawContext;
@@ -22,14 +24,18 @@ public class ClickGuiScreen extends Screen {
    private static final int CORNER_R = 8;
    private static final int SCROLL_SPEED = 10;
    private static final Identifier CUSTOM_FONT = Identifier.of("pathdlc_digger", "clickgui");
+   private static final Identifier LOGO = Identifier.of("pathdlc_digger", "textures/gui/logo.png");
    private final List<Category> categories = new ArrayList<>();
    private float openProgress = 0.0F;
    private final Map<String, Integer> scrollOffsets = new HashMap<>();
    private final Map<String, Float> colDragY = new HashMap<>();
+   private final Map<String, Boolean> compactExpanded = new HashMap<>();
    private ModuleSetting draggingSlider;
    private float draggingSliderX;
    private float draggingSliderW;
    private int dogenSelectedCategory = 0;
+   private int tabsSelectedCategory = 0;
+   private int cardsOpenCategory = -1;
    private static final int DOGEN_PANEL_W = 520;
    private static final int DOGEN_PANEL_H = 320;
    private static final int DOGEN_SIDEBAR_W = 90;
@@ -37,6 +43,29 @@ public class ClickGuiScreen extends Screen {
    private static final int DOGEN_GAP = 6;
    private static final int DOGEN_CAT_H = 30;
    private static final int DOGEN_MODULE_H = 22;
+   private static final int TABS_PANEL_W = 540;
+   private static final int TABS_PANEL_H = 320;
+   private static final int TABS_BAR_H = 36;
+   private static final int TABS_GAP = 6;
+   private static final int TABS_MODULE_H = 22;
+   private static final int COMPACT_PANEL_W = 200;
+   private static final int COMPACT_HEADER_H = 30;
+   private static final int COMPACT_CAT_H = 22;
+   private static final int COMPACT_MODULE_H = 18;
+   private static final int CARDS_W = 160;
+   private static final int CARDS_H = 90;
+   private static final int CARDS_GAP = 10;
+   private static final int CARDS_COLS = 3;
+   private static final int CARDS_OVERLAY_W = 340;
+   private static final int CARDS_OVERLAY_H = 300;
+
+   private enum Style {
+      COLON,
+      DOGEN,
+      TABS,
+      COMPACT,
+      CARDS
+   }
 
    public ClickGuiScreen() {
       super(Text.literal("ClickGUI"));
@@ -52,310 +81,139 @@ public class ClickGuiScreen extends Screen {
       Runnable appleOff,
       Runnable digOn,
       Runnable digOff,
-      Runnable wardenOn,
-      Runnable wardenOff,
       Runnable clanOn,
-      Runnable clanOff,
-      Runnable autoMineOn,
-      Runnable autoMineOff,
-      Runnable baseFinderOn,
-      Runnable baseFinderOff,
-      Runnable autoFarmOn,
-      Runnable autoFarmOff,
-      Runnable autoFishOn,
-      Runnable autoFishOff,
-      Runnable autoCraftOn,
-      Runnable autoCraftOff,
-      Runnable autoSellOn,
-      Runnable autoSellOff,
-      Runnable autoBuyOn,
-      Runnable autoBuyOff
+      Runnable clanOff
    ) {
       if (this.categories.isEmpty()) {
-         Module killAura = new Module("KillAura");
-         killAura.addSetting(ModuleSetting.slider("Range", 4.0F, 2.0F, 6.0F, 0.1F));
-         killAura.addSetting(ModuleSetting.toggle("Only Crit", false));
-         killAura.addSetting(ModuleSetting.toggle("Attack Mobs", true));
-         killAura.addSetting(ModuleSetting.toggle("Attack Players", false));
-         Module aimAssist = new Module("AimAssist");
-         aimAssist.addSetting(ModuleSetting.slider("Speed", 50.0F, 10.0F, 100.0F, 5.0F));
-         aimAssist.addSetting(ModuleSetting.slider("FOV", 90.0F, 30.0F, 180.0F, 10.0F));
-         aimAssist.addSetting(ModuleSetting.toggle("Visible Only", true));
-         Module antiKnockback = new Module("AntiKB");
-         antiKnockback.addSetting(ModuleSetting.slider("Horizontal", 0.0F, 0.0F, 100.0F, 5.0F));
-         antiKnockback.addSetting(ModuleSetting.slider("Vertical", 0.0F, 0.0F, 100.0F, 5.0F));
-         Module velocity = new Module("Velocity");
-         velocity.addSetting(ModuleSetting.choice("Mode", new String[]{"Cancel", "Reduce", "Reverse"}, 0));
-         Module autoArmor = new Module("AutoArmor");
-         Module autoTotem = new Module("AutoTotem");
-         Module triggerBot = new Module("TriggerBot");
-         triggerBot.addSetting(ModuleSetting.slider("Delay", 1.0F, 0.0F, 5.0F, 1.0F));
-         Module reach = new Module("Reach");
-         reach.addSetting(ModuleSetting.slider("Distance", 3.5F, 3.0F, 6.0F, 0.1F));
-         Module antiBot = new Module("AntiBot");
-         antiBot.addSetting(ModuleSetting.choice("Mode", new String[]{"Default", "Advanced", "FunTime"}, 0));
-         Module criticals = new Module("Criticals");
-         criticals.addSetting(ModuleSetting.choice("Mode", new String[]{"Packet", "Jump", "Mini Jump"}, 0));
-         Module autoClicker = new Module("AutoClicker");
-         autoClicker.addSetting(ModuleSetting.slider("CPS", 12.0F, 1.0F, 20.0F, 1.0F));
-         autoClicker.addSetting(ModuleSetting.toggle("Right Click", false));
-         Module clan = new Module("Clan", clanOn, clanOff);
-         Category combat = new Category("Combat", 0.0F, 0.0F);
-         combat.addModule(killAura);
-         combat.addModule(aimAssist);
-         combat.addModule(antiKnockback);
-         combat.addModule(velocity);
-         combat.addModule(autoArmor);
-         combat.addModule(autoTotem);
-         combat.addModule(triggerBot);
-         combat.addModule(reach);
-         combat.addModule(antiBot);
-         combat.addModule(criticals);
-         combat.addModule(autoClicker);
-         combat.addModule(clan);
-         this.categories.add(combat);
-         Module speed = new Module("Speed");
-         speed.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Strafe", "BHop", "Low Hop"}, 0));
-         speed.addSetting(ModuleSetting.slider("Speed", 1.5F, 0.5F, 5.0F, 0.1F));
-         Module flight = new Module("Flight");
-         flight.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Glide", "Jetpack", "Creative"}, 0));
-         flight.addSetting(ModuleSetting.slider("Speed", 2.0F, 0.5F, 10.0F, 0.5F));
-         Module noFall = new Module("NoFall");
-         noFall.addSetting(ModuleSetting.choice("Mode", new String[]{"Packet", "Spoof", "MLG"}, 0));
-         Module sprint = new Module("Sprint");
-         sprint.addSetting(ModuleSetting.choice("Mode", new String[]{"Legit", "Omnidirectional"}, 0));
-         Module step = new Module("Step");
-         step.addSetting(ModuleSetting.slider("Height", 1.0F, 0.5F, 2.5F, 0.5F));
-         Module noSlowdown = new Module("NoSlow");
-         noSlowdown.addSetting(ModuleSetting.toggle("Items", true));
-         noSlowdown.addSetting(ModuleSetting.toggle("Soulsand", true));
-         noSlowdown.addSetting(ModuleSetting.toggle("Web", true));
-         Module elytraFly = new Module("ElytraFly");
-         elytraFly.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Boost", "Control"}, 0));
-         elytraFly.addSetting(ModuleSetting.slider("Speed", 1.5F, 0.5F, 5.0F, 0.1F));
-         Module jesus = new Module("Jesus");
-         jesus.addSetting(ModuleSetting.choice("Mode", new String[]{"Solid", "Dolphin", "Trident"}, 0));
-         Module sneak = new Module("Sneak");
-         sneak.addSetting(ModuleSetting.choice("Mode", new String[]{"Vanilla", "Packet", "Legit"}, 0));
-         Module spider = new Module("Spider");
-         spider.addSetting(ModuleSetting.slider("Speed", 0.5F, 0.1F, 2.0F, 0.1F));
-         Module phase = new Module("Phase");
-         Module safewalk = new Module("SafeWalk");
-         Module bunnyHop = new Module("BunnyHop");
-         Module invWalk = new Module("InvWalk");
-         Module parkour = new Module("Parkour");
-         Module antiVoid = new Module("AntiVoid");
-         Module longJump = new Module("LongJump");
-         longJump.addSetting(ModuleSetting.slider("Boost", 1.5F, 1.0F, 4.0F, 0.1F));
-         Category movement = new Category("Movement", 0.0F, 0.0F);
-         movement.addModule(speed);
-         movement.addModule(flight);
-         movement.addModule(noFall);
-         movement.addModule(sprint);
-         movement.addModule(step);
-         movement.addModule(noSlowdown);
-         movement.addModule(elytraFly);
-         movement.addModule(jesus);
-         movement.addModule(sneak);
-         movement.addModule(spider);
-         movement.addModule(phase);
-         movement.addModule(safewalk);
-         movement.addModule(bunnyHop);
-         movement.addModule(invWalk);
-         movement.addModule(parkour);
-         movement.addModule(antiVoid);
-         movement.addModule(longJump);
-         this.categories.add(movement);
-         Module esp = new Module("ESP");
-         esp.addSetting(ModuleSetting.choice("Mode", new String[]{"Box", "Glow", "2D", "Outline"}, 0));
-         esp.addSetting(ModuleSetting.toggle("Players", true));
-         esp.addSetting(ModuleSetting.toggle("Mobs", true));
-         esp.addSetting(ModuleSetting.toggle("Items", false));
-         Module tracers = new Module("Tracers");
-         tracers.addSetting(ModuleSetting.toggle("Players", true));
-         tracers.addSetting(ModuleSetting.toggle("Mobs", false));
-         Module nametags = new Module("Nametags");
-         nametags.addSetting(ModuleSetting.toggle("Health", true));
-         nametags.addSetting(ModuleSetting.toggle("Armor", true));
-         nametags.addSetting(ModuleSetting.slider("Scale", 1.5F, 0.5F, 3.0F, 0.1F));
-         Module chams = new Module("Chams");
-         chams.addSetting(ModuleSetting.choice("Mode", new String[]{"Colored", "Textured", "Flat"}, 0));
-         Module fullBright = new Module("FullBright");
-         fullBright.addSetting(ModuleSetting.choice("Mode", new String[]{"Gamma", "Night Vision"}, 0));
-         Module xray = new Module("XRay");
-         xray.addSetting(ModuleSetting.choice("Mode", new String[]{"Default", "Ores Only", "Custom"}, 0));
-         Module blockOverlay = new Module("BlockOverlay");
-         blockOverlay.addSetting(ModuleSetting.choice("Texture", new String[]{"Kitten", "Sky", "Devil"}, 0));
-         Module blockEsp = new Module("BlockESP");
-         blockEsp.addSetting(ModuleSetting.slider("Radius", 32.0F, 8.0F, 64.0F, 4.0F));
-         Module motionBlur = new Module("MotionBlur");
-         motionBlur.addSetting(ModuleSetting.slider("Strength", 0.5F, 0.1F, 0.9F, 0.05F));
-         Module hitEffects = new Module("HitEffects");
-         Module noRender = new Module("NoRender");
-         noRender.addSetting(ModuleSetting.toggle("Fire", true));
-         noRender.addSetting(ModuleSetting.toggle("Pumpkin", true));
-         noRender.addSetting(ModuleSetting.toggle("Totem", true));
-         noRender.addSetting(ModuleSetting.toggle("Fog", true));
-         noRender.addSetting(ModuleSetting.toggle("Blindness", true));
-         Module freecam = new Module("Freecam");
-         freecam.addSetting(ModuleSetting.slider("Speed", 1.0F, 0.1F, 5.0F, 0.1F));
-         Module waypoints = new Module("Waypoints");
-         Module fog = new Module("Fog");
-         fog.addSetting(ModuleSetting.choice("Color", new String[]{"White", "Light Blue", "Purple", "Red", "Green", "Dark", "Golden"}, 0));
-         fog.addSetting(ModuleSetting.slider("Density", 0.5F, 0.0F, 1.0F, 0.1F));
-         Module aspectRatio = new Module("AspectRatio");
-         aspectRatio.addSetting(ModuleSetting.slider("FOV Scale", 1.33F, 1.0F, 2.0F, 0.01F));
-         Module breadcrumbs = new Module("Breadcrumbs");
-         Module storageESP = new Module("StorageESP");
-         storageESP.addSetting(ModuleSetting.toggle("Chests", true));
-         storageESP.addSetting(ModuleSetting.toggle("Ender Chests", true));
-         storageESP.addSetting(ModuleSetting.toggle("Shulkers", true));
-         Category render = new Category("Render", 0.0F, 0.0F);
-         render.addModule(esp);
-         render.addModule(tracers);
-         render.addModule(nametags);
-         render.addModule(chams);
-         render.addModule(fullBright);
-         render.addModule(xray);
-         render.addModule(blockOverlay);
-         render.addModule(blockEsp);
-         render.addModule(motionBlur);
-         render.addModule(hitEffects);
-         render.addModule(noRender);
-         render.addModule(freecam);
-         render.addModule(waypoints);
-         render.addModule(fog);
-         render.addModule(aspectRatio);
-         render.addModule(breadcrumbs);
-         render.addModule(storageESP);
-         this.categories.add(render);
-         Module autoFish = new Module("AutoFish", autoFishOn, autoFishOff);
-         Module noRotate = new Module("NoRotate");
-         Module fastPlace = new Module("FastPlace");
-         fastPlace.addSetting(ModuleSetting.slider("Delay", 0.0F, 0.0F, 4.0F, 1.0F));
-         Module fastBreak = new Module("FastBreak");
-         fastBreak.addSetting(ModuleSetting.slider("Multiplier", 1.5F, 1.0F, 5.0F, 0.1F));
-         Module autoTool = new Module("AutoTool");
-         Module scaffold = new Module("Scaffold");
-         scaffold.addSetting(ModuleSetting.choice("Mode", new String[]{"Normal", "Expand", "Tower"}, 0));
-         scaffold.addSetting(ModuleSetting.toggle("Safe Walk", true));
-         Module timer = new Module("Timer");
-         timer.addSetting(ModuleSetting.slider("Speed", 1.0F, 0.1F, 5.0F, 0.1F));
-         Module blink = new Module("Blink");
-         Module antiHunger = new Module("AntiHunger");
-         Module autoEat = new Module("AutoEat");
-         autoEat.addSetting(ModuleSetting.slider("Health", 10.0F, 1.0F, 19.0F, 1.0F));
-         Module chestStealer = new Module("ChestStealer");
-         chestStealer.addSetting(ModuleSetting.slider("Delay", 50.0F, 0.0F, 500.0F, 25.0F));
-         Module inventoryCleaner = new Module("InvCleaner");
-         Module autoRespawn = new Module("AutoRespawn");
-         Module pingSpoof = new Module("PingSpoof");
-         pingSpoof.addSetting(ModuleSetting.slider("Ping", 100.0F, 0.0F, 1000.0F, 50.0F));
-         Module skinBlink = new Module("SkinBlink");
-         Module autoDisconnect = new Module("AutoLeave");
-         autoDisconnect.addSetting(ModuleSetting.slider("Health", 5.0F, 1.0F, 19.0F, 1.0F));
-         Category player = new Category("Player", 0.0F, 0.0F);
-         player.addModule(autoFish);
-         player.addModule(noRotate);
-         player.addModule(fastPlace);
-         player.addModule(fastBreak);
-         player.addModule(autoTool);
-         player.addModule(scaffold);
-         player.addModule(timer);
-         player.addModule(blink);
-         player.addModule(antiHunger);
-         player.addModule(autoEat);
-         player.addModule(chestStealer);
-         player.addModule(inventoryCleaner);
-         player.addModule(autoRespawn);
-         player.addModule(pingSpoof);
-         player.addModule(skinBlink);
-         player.addModule(autoDisconnect);
-         this.categories.add(player);
-         Module warden = new Module("Warden", wardenOn, wardenOff);
-         Module baseFinder = new Module("BaseFinder", baseFinderOn, baseFinderOff);
-         baseFinder.addSetting(ModuleSetting.slider("Radius", 64.0F, 16.0F, 128.0F, 16.0F));
-         Module nuker = new Module("Nuker");
-         nuker.addSetting(ModuleSetting.slider("Radius", 4.0F, 1.0F, 6.0F, 1.0F));
-         nuker.addSetting(ModuleSetting.choice("Mode", new String[]{"All", "Flat", "Smash"}, 0));
-         Module autoSign = new Module("AutoSign");
-         Module fucker = new Module("Fucker");
-         fucker.addSetting(ModuleSetting.choice("Block", new String[]{"Bed", "Cake", "Spawner", "Egg"}, 0));
-         Module autoFarm = new Module("AutoFarm", autoFarmOn, autoFarmOff);
-         autoFarm.addSetting(ModuleSetting.slider("Radius", 4.0F, 2.0F, 8.0F, 1.0F));
-         Module autoMine = new Module("AutoMine", autoMineOn, autoMineOff);
-         autoMine.addSetting(ModuleSetting.choice("Ore", new String[]{"Diamond", "Emerald", "Gold", "Iron", "Netherite", "All Ores"}, 0));
          Module apple = new Module("Apple", appleOn, appleOff);
+         apple.addSetting(ModuleSetting.toggle("Notify", true));
          Module dig = new Module("Dig", digOn, digOff);
-         Module tunneller = new Module("Tunneller");
-         tunneller.addSetting(ModuleSetting.choice("Size", new String[]{"1x2", "2x2", "3x3"}, 0));
-         Module veinMiner = new Module("VeinMiner");
-         Category world = new Category("World", 0.0F, 0.0F);
-         world.addModule(warden);
-         world.addModule(baseFinder);
-         world.addModule(nuker);
-         world.addModule(autoSign);
-         world.addModule(fucker);
-         world.addModule(autoFarm);
-         world.addModule(autoMine);
-         world.addModule(apple);
-         world.addModule(dig);
-         world.addModule(tunneller);
-         world.addModule(veinMiner);
-         this.categories.add(world);
-         Module disabler = new Module("Disabler");
-         disabler.addSetting(ModuleSetting.choice("Mode", new String[]{"FunTime", "Matrix", "Vulcan", "Grim"}, 0));
-         Module fastBow = new Module("FastBow");
-         Module ghostHand = new Module("GhostHand");
-         Module packetMine = new Module("PacketMine");
-         Module autoGapple = new Module("AutoGapple");
-         Module portalGodMode = new Module("PortalGod");
-         Module tpAura = new Module("TPAura");
-         tpAura.addSetting(ModuleSetting.slider("Range", 8.0F, 3.0F, 32.0F, 1.0F));
-         Module boatFly = new Module("BoatFly");
-         boatFly.addSetting(ModuleSetting.slider("Speed", 2.0F, 0.5F, 10.0F, 0.5F));
-         Module nameProtect = new Module("NameProtect");
-         Module serverCrasher = new Module("Crasher");
-         serverCrasher.addSetting(ModuleSetting.choice("Mode", new String[]{"Packet", "Book", "Movement"}, 0));
-         Category exploit = new Category("Exploit", 0.0F, 0.0F);
-         exploit.addModule(disabler);
-         exploit.addModule(fastBow);
-         exploit.addModule(ghostHand);
-         exploit.addModule(packetMine);
-         exploit.addModule(autoGapple);
-         exploit.addModule(portalGodMode);
-         exploit.addModule(tpAura);
-         exploit.addModule(boatFly);
-         exploit.addModule(nameProtect);
-         exploit.addModule(serverCrasher);
-         this.categories.add(exploit);
-         Module autoCraft = new Module("AutoCraft", autoCraftOn, autoCraftOff);
-         autoCraft.addSetting(ModuleSetting.choice("Recipe", new String[]{"Planks", "Sticks", "Torches", "Bread", "Golden Apple"}, 0));
-         Module autoSell = new Module("AutoSell", autoSellOn, autoSellOff);
-         autoSell.addSetting(ModuleSetting.choice("Mode", new String[]{"Buyer", "Junk Only", "Sell All"}, 0));
-         autoSell.addSetting(ModuleSetting.slider("Interval", 30.0F, 10.0F, 120.0F, 5.0F));
-         Module autoBuy = new Module("AutoBuy", autoBuyOn, autoBuyOff);
-         autoBuy.addSetting(
-            ModuleSetting.choice("Item", new String[]{"Diamond", "Emerald", "Netherite", "God Apple", "Elytra", "Totem", "Shulker", "Beacon"}, 0)
-         );
-         autoBuy.addSetting(ModuleSetting.slider("Max Price", 10000.0F, 100.0F, 100000.0F, 500.0F));
-         autoBuy.addSetting(ModuleSetting.slider("Interval", 10.0F, 3.0F, 60.0F, 1.0F));
-         autoBuy.addSetting(ModuleSetting.choice("Search", new String[]{"Browse /ah", "Search /ah search"}, 1));
+         dig.addSetting(ModuleSetting.toggle("Use Baritone", true));
+         Module clan = new Module("Clan", clanOn, clanOff);
+         clan.addSetting(ModuleSetting.toggle("Notify", true));
          Module autoEvent = new Module("AutoEvent");
-         autoEvent.addSetting(ModuleSetting.toggle("Auto Join", true));
-         Module salary = new Module("Salary");
-         salary.addSetting(ModuleSetting.slider("Interval", 60.0F, 30.0F, 300.0F, 10.0F));
-         Category funtime = new Category("FunTime", 0.0F, 0.0F);
-         funtime.addModule(autoCraft);
-         funtime.addModule(autoSell);
-         funtime.addModule(autoBuy);
-         funtime.addModule(autoEvent);
-         funtime.addModule(salary);
-         this.categories.add(funtime);
+         autoEvent.addSetting(ModuleSetting.toggle("Auto Refresh", true));
+         Category modules = new Category("Modules", 0.0F, 0.0F);
+         modules.addModule(apple);
+         modules.addModule(dig);
+         modules.addModule(clan);
+         modules.addModule(autoEvent);
+         this.categories.add(modules);
+
+         Module fullBright = new Module("FullBright");
+         Module timeChanger = new Module("TimeChanger");
+         timeChanger.addSetting(ModuleSetting.choice("Time", new String[]{"Day", "Night", "Sunrise", "Sunset"}, 0));
+         Module noWeather = new Module("NoWeather");
+         Module noFog = new Module("NoFog");
+         Module noHurtCam = new Module("NoHurtCam");
+         Module autoRespawn = new Module("AutoRespawn");
+         Module autoReconnect = new Module("AutoReconnect");
+         autoReconnect.addSetting(ModuleSetting.slider("Delay", 5.0F, 1.0F, 30.0F, 1.0F));
+         Module blockEsp = new Module("BlockESP");
+         Module blockOverlay = new Module("BlockOverlay");
+
+         String[] particleChoices = new String[]{"Hearts", "Sparks", "Crit", "Magic", "Soul", "Flame", "Cloud"};
+         Module hitParticles = new Module("HitParticles");
+         hitParticles.addSetting(ModuleSetting.choice("Type", particleChoices, 0));
+         Module hitSound = new Module("HitSound");
+         hitSound.addSetting(ModuleSetting.choice("Sound",
+               new String[]{"Bonk", "Punch", "Critical", "ApplePay", "Frag", "Bass",
+                            "Chime", "Beep", "Clock", "UwU",
+                            "BitClick", "Bell", "Snap", "Wood", "Anvil"}, 0));
+         hitSound.addSetting(ModuleSetting.slider("Volume", 0.6F, 0.0F, 1.0F, 0.05F));
+         hitSound.addSetting(ModuleSetting.slider("Pitch", 1.0F, 0.5F, 2.0F, 0.1F));
+         Module customFog = new Module("CustomFog");
+         customFog.addSetting(ModuleSetting.choice("Color", new String[]{"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink", "White"}, 0));
+         customFog.addSetting(ModuleSetting.slider("Density", 0.5F, 0.0F, 0.95F, 0.05F));
+         Module jumpCircle = new Module("JumpCircle");
+         jumpCircle.addSetting(ModuleSetting.choice("Type", particleChoices, 1));
+         Module targetEffect = new Module("TargetEffect");
+         targetEffect.addSetting(ModuleSetting.choice("Type", particleChoices, 0));
+         Module chinaHat = new Module("ChinaHat");
+         chinaHat.addSetting(ModuleSetting.choice("Type", particleChoices, 1));
+
+         Module crosshair = new Module("Crosshair");
+         crosshair.addSetting(ModuleSetting.choice("Style",
+               new String[]{"Cross", "Dot", "Plus", "X", "Circle", "Square"}, 0));
+         crosshair.addSetting(ModuleSetting.slider("Size", 5.0F, 2.0F, 10.0F, 1.0F));
+         crosshair.addSetting(ModuleSetting.slider("Gap", 2.0F, 0.0F, 6.0F, 1.0F));
+         crosshair.addSetting(ModuleSetting.toggle("Accent", false));
+
+         Module zoom = new Module("Zoom");
+         zoom.addSetting(ModuleSetting.slider("Zoom", 0.30F, 0.05F, 0.90F, 0.05F));
+
+         Module tntTimer = new Module("TNTTimer");
+
+         Module trails = new Module("Trails");
+         trails.addSetting(ModuleSetting.choice("Type", particleChoices, 1));
+
+         Module noRender = new Module("NoRender");
+         noRender.addSetting(ModuleSetting.toggle("BossBar", false));
+         noRender.addSetting(ModuleSetting.toggle("Scoreboard", false));
+         noRender.addSetting(ModuleSetting.toggle("Portal", false));
+         noRender.addSetting(ModuleSetting.toggle("Overlays", false));
+         noRender.addSetting(ModuleSetting.toggle("Nausea", false));
+
+         Category world = new Category("World", 0.0F, 0.0F);
+         world.addModule(fullBright);
+         world.addModule(timeChanger);
+         world.addModule(noWeather);
+         world.addModule(noFog);
+         world.addModule(noHurtCam);
+         world.addModule(customFog);
+         world.addModule(hitParticles);
+         world.addModule(hitSound);
+         world.addModule(jumpCircle);
+         world.addModule(targetEffect);
+         world.addModule(chinaHat);
+         world.addModule(crosshair);
+         world.addModule(zoom);
+         world.addModule(tntTimer);
+         world.addModule(trails);
+         world.addModule(noRender);
+         world.addModule(autoRespawn);
+         world.addModule(autoReconnect);
+         world.addModule(blockEsp);
+         world.addModule(blockOverlay);
+         this.categories.add(world);
+
+         Module hudOptions = new Module("HUDOptions");
+         hudOptions.addSetting(ModuleSetting.toggle("Watermark", true));
+         hudOptions.addSetting(ModuleSetting.toggle("ArrayList", true));
+         hudOptions.addSetting(ModuleSetting.toggle("FPS", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Ping", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Coords", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Time", false));
+         hudOptions.addSetting(ModuleSetting.toggle("TargetHUD", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Music", true));
+         hudOptions.addSetting(ModuleSetting.toggle("Keystrokes", false));
+         hudOptions.addSetting(ModuleSetting.toggle("ArmorHUD", false));
+         hudOptions.addSetting(ModuleSetting.toggle("ItemCounter", false));
+         hudOptions.addSetting(ModuleSetting.toggle("PotionEffects", false));
+         hudOptions.setEnabled(true);
+         Category hud = new Category("HUD", 0.0F, 0.0F);
+         hud.addModule(hudOptions);
+         this.categories.add(hud);
+
          Module menuStyle = new Module("MenuStyle");
-         menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen"}, 0));
+         menuStyle.addSetting(ModuleSetting.choice("Style", new String[]{"Colon", "Dogen", "Tabs", "Compact", "Cards"}, 0));
+         menuStyle.addSetting(ModuleSetting.choice("Background", new String[]{"Default", "Fever"}, 0));
+         Module clientName = new Module("ClientName");
+         clientName.addSetting(ModuleSetting.choice("Format",
+               new String[]{
+                     "WareVisuals %fps% FPS",
+                     "WareVisuals - %name%",
+                     "WareVisuals %ver% | %fps% FPS | %ping% ms",
+                     "%name% — %fps% FPS — %time%"
+               }, 0));
+
+         Module sounds = new Module("Sounds");
+         sounds.addSetting(ModuleSetting.slider("Volume", 0.6F, 0.0F, 1.0F, 0.05F));
+         sounds.setEnabled(true);
          Category settings = new Category("Settings", 0.0F, 0.0F);
          settings.addModule(menuStyle);
+         settings.addModule(clientName);
+         settings.addModule(sounds);
          this.categories.add(settings);
 
          for (Category cat : this.categories) {
@@ -367,12 +225,34 @@ public class ClickGuiScreen extends Screen {
    }
 
    private boolean isDogenLayout() {
+      return this.getStyle() == Style.DOGEN;
+   }
+
+   private Style getStyle() {
       Module m = ModuleManager.get("MenuStyle");
       if (m == null) {
-         return false;
+         return Style.COLON;
       }
       ModuleSetting s = m.getSetting("Style");
-      return s != null && "Dogen".equals(s.getChoiceValue());
+      if (s == null) {
+         return Style.COLON;
+      }
+      String v = s.getChoiceValue();
+      if (v == null) {
+         return Style.COLON;
+      }
+      switch (v) {
+         case "Dogen":
+            return Style.DOGEN;
+         case "Tabs":
+            return Style.TABS;
+         case "Compact":
+            return Style.COMPACT;
+         case "Cards":
+            return Style.CARDS;
+         default:
+            return Style.COLON;
+      }
    }
 
    private int totalWidth() {
@@ -388,24 +268,120 @@ public class ClickGuiScreen extends Screen {
    }
 
    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-      this.openProgress = this.openProgress + (1.0F - this.openProgress) * 0.15F;
-      if (this.openProgress > 0.99F) {
-         this.openProgress = 1.0F;
-      }
+      Animations.beginFrame();
+      this.openProgress = Animations.ease(this.openProgress, 1.0F, 0.06F);
+      this.tickModuleAnimations();
 
       if (!(this.openProgress < 0.01F)) {
          LiquidGlassRenderer.captureAndBlur();
          int dimAlpha = (int)(this.openProgress * 102.0F);
          context.fill(0, 0, this.width, this.height, dimAlpha << 24);
          GuiSettings.AccentColor accent = GuiSettings.getAccentColor();
-         if (this.isDogenLayout()) {
-            this.renderDogenLayout(context, mouseX, mouseY, accent);
-         } else {
-            this.renderColonLayout(context, mouseX, mouseY, accent);
+         switch (this.getStyle()) {
+            case DOGEN:
+               this.renderDogenLayout(context, mouseX, mouseY, accent);
+               break;
+            case TABS:
+               this.renderTabsLayout(context, mouseX, mouseY, accent);
+               break;
+            case COMPACT:
+               this.renderCompactLayout(context, mouseX, mouseY, accent);
+               break;
+            case CARDS:
+               this.renderCardsLayout(context, mouseX, mouseY, accent);
+               break;
+            default:
+               this.renderColonLayout(context, mouseX, mouseY, accent);
+               this.renderColonBrand(context, accent);
+               break;
          }
 
          super.render(context, mouseX, mouseY, delta);
       }
+   }
+
+   private static int blendColor(int from, int to, float t) {
+      if (t <= 0.0F) {
+         return from;
+      }
+      if (t >= 1.0F) {
+         return to;
+      }
+      int fa = (from >>> 24) & 0xFF;
+      int fr = (from >> 16) & 0xFF;
+      int fg = (from >> 8) & 0xFF;
+      int fb = from & 0xFF;
+      int ta = (to >>> 24) & 0xFF;
+      int tr = (to >> 16) & 0xFF;
+      int tg = (to >> 8) & 0xFF;
+      int tb = to & 0xFF;
+      int a = (int) (fa + (ta - fa) * t);
+      int r = (int) (fr + (tr - fr) * t);
+      int g = (int) (fg + (tg - fg) * t);
+      int b = (int) (fb + (tb - fb) * t);
+      return (a << 24) | (r << 16) | (g << 8) | b;
+   }
+
+   private void drawAnimToggle(DrawContext ctx, int x, int y, int w, int h, float anim, int offBg, int onBg) {
+      float eased = Animations.smoothstep(anim);
+      int bg = blendColor(offBg, onBg, eased);
+      RoundedRectRenderer.draw(ctx, x, y, w, h, h / 2, bg);
+      int knobD = h - 2;
+      int leftX = x + 1;
+      int rightX = x + w - knobD - 1;
+      int knobX = Math.round(leftX + (rightX - leftX) * eased);
+      RoundedRectRenderer.draw(ctx, knobX, y + 1, knobD, knobD, knobD / 2, -1);
+   }
+
+   private void tickModuleAnimations() {
+      for (Category cat : this.categories) {
+         for (ModuleButton btn : cat.getModules()) {
+            Module m = btn.getModule();
+            float toggleTarget = m.isEnabled() ? 1.0F : 0.0F;
+            m.enabledAnim = Animations.ease(m.enabledAnim, toggleTarget, 0.05F);
+            float expandTarget = m.isSettingsExpanded() ? 1.0F : 0.0F;
+            m.expandedAnim = Animations.ease(m.expandedAnim, expandTarget, 0.07F);
+            for (ModuleSetting s : m.getSettings()) {
+               if (s.getType() == ModuleSetting.Type.TOGGLE) {
+                  float t = s.getBool() ? 1.0F : 0.0F;
+                  s.toggleAnim = Animations.ease(s.toggleAnim, t, 0.05F);
+               }
+            }
+         }
+      }
+   }
+
+   private void renderColonBrand(DrawContext context, GuiSettings.AccentColor accent) {
+      float alpha = this.openProgress;
+      if (alpha < 0.05F) {
+         return;
+      }
+      int logoSize = 22;
+      String brand = "WareVisuals";
+      int textW = this.textRenderer.getWidth(this.styledText(brand));
+      int rowW = 14 + logoSize + 6 + textW + 14;
+      int rowH = 30;
+      int rowX = (this.width - rowW) / 2;
+      int rowY = 8 + (int)((1.0F - alpha) * -10.0F);
+      int alphaByte = (int)(alpha * 200.0F);
+      RoundedRectRenderer.draw(context, rowX, rowY, rowW, rowH, 6, alphaByte << 24 | 0x080808);
+      int logoX = rowX + 14;
+      int logoY = rowY + rowH / 2 - logoSize / 2;
+      context.drawTexture(
+         RenderLayer::getGuiTextured,
+         LOGO,
+         logoX,
+         logoY,
+         0.0F,
+         0.0F,
+         logoSize,
+         logoSize,
+         logoSize,
+         logoSize
+      );
+      int textX = logoX + logoSize + 6;
+      int textY = rowY + rowH / 2 - this.textRenderer.fontHeight / 2;
+      this.drawStyledText(context, brand, textX, textY, -1);
    }
 
    private void renderColonLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
@@ -466,7 +442,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)sidebarX, (float)sidebarY, (float)DOGEN_SIDEBAR_W, (float)sidebarH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, sidebarX, sidebarY, DOGEN_SIDEBAR_W, sidebarH, 8, -871230694);
+         RoundedRectRenderer.draw(context, sidebarX, sidebarY, DOGEN_SIDEBAR_W, sidebarH, 8, 0xCC1A0A0F);
       }
 
       int catH = Math.max(DOGEN_CAT_H, (sidebarH - 8) / Math.max(1, this.categories.size()));
@@ -501,13 +477,33 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)hx, (float)hy, (float)hw, (float)DOGEN_HEADER_H, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, hx, hy, hw, DOGEN_HEADER_H, 8, -871230694);
+         RoundedRectRenderer.draw(context, hx, hy, hw, DOGEN_HEADER_H, 8, 0xCC1A0A0F);
       }
 
       Category selectedCat = this.categories.get(this.dogenSelectedCategory);
       String header = selectedCat.getName();
       int headerY = hy + DOGEN_HEADER_H / 2 - this.textRenderer.fontHeight / 2;
-      this.drawStyledText(context, header, hx + 12, headerY, -1);
+      int logoSize = 18;
+      int logoX = hx + 8;
+      int logoY = hy + DOGEN_HEADER_H / 2 - logoSize / 2;
+      context.drawTexture(
+         RenderLayer::getGuiTextured,
+         LOGO,
+         logoX,
+         logoY,
+         0.0F,
+         0.0F,
+         logoSize,
+         logoSize,
+         logoSize,
+         logoSize
+      );
+      int brandX = logoX + logoSize + 6;
+      this.drawStyledText(context, "WareVisuals", brandX, headerY, accent.textColor);
+      int brandW = this.textRenderer.getWidth(this.styledText("WareVisuals"));
+      int sepX = brandX + brandW + 8;
+      context.fill(sepX, hy + 8, sepX + 1, hy + DOGEN_HEADER_H - 8, 0x40FFFFFF);
+      this.drawStyledText(context, header, sepX + 8, headerY, -1);
       int countLabelW = this.textRenderer.getWidth(this.styledText(selectedCat.getModules().size() + " modules"));
       this.drawStyledText(
          context,
@@ -523,7 +519,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)mainX, (float)mainY, (float)mainW, (float)mainH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, mainX, mainY, mainW, mainH, 8, -871230694);
+         RoundedRectRenderer.draw(context, mainX, mainY, mainW, mainH, 8, 0xCC1A0A0F);
       }
 
       int scroll = this.scrollOffsets.getOrDefault("dogen:" + selectedCat.getName(), 0);
@@ -540,11 +536,13 @@ public class ClickGuiScreen extends Screen {
             && mouseY >= mainY + 2
             && mouseY < mainY + mainH - 2;
          btn.updateHover(hovered);
-         if (mod.isEnabled()) {
-            RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, (int)(78.0F * alpha) << 24 | accent.textColor & 16777215);
-         } else if (btn.hoverAmount > 0.01F) {
+         if (btn.hoverAmount > 0.01F) {
             int hAlpha = (int)(btn.hoverAmount * 36.0F * alpha);
             RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, hAlpha << 24 | 16777215);
+         }
+         if (mod.enabledAnim > 0.01F) {
+            int eAlpha = (int)(mod.enabledAnim * 78.0F * alpha);
+            RoundedRectRenderer.draw(context, mainX + 6, rowY, mainW - 12, rowH, 5, eAlpha << 24 | accent.textColor & 16777215);
          }
 
          int nameColor = mod.isEnabled() ? -1 : -3355444;
@@ -554,11 +552,8 @@ public class ClickGuiScreen extends Screen {
          int sh = 12;
          int tx = mainX + mainW - 12 - sw;
          int ty = rowY + rowH / 2 - sh / 2;
-         int bgColor = mod.isEnabled() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
-         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
-         int knobD = sh - 2;
-         int knobX = mod.isEnabled() ? tx + sw - knobD - 1 : tx + 1;
-         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+         int onBg = 0xBB000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, tx, ty, sw, sh, mod.enabledAnim, 0x44303030, onBg);
          if (mod.hasSettings()) {
             String arrow = mod.isSettingsExpanded() ? "v" : ">";
             int arrowColor = mod.isSettingsExpanded() ? accent.textColor : -8947849;
@@ -609,11 +604,8 @@ public class ClickGuiScreen extends Screen {
          int sh = 8;
          int tx = right - sw - 2;
          int ty = y + 8 - sh / 2;
-         int bgColor = setting.getBool() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
-         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
-         int knobD = sh - 2;
-         int knobX = setting.getBool() ? tx + sw - knobD - 1 : tx + 1;
-         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+         int onBg = 0xBB000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, tx, ty, sw, sh, setting.toggleAnim, 0x44303030, onBg);
       } else if (setting.getType() == ModuleSetting.Type.CHOICE) {
          this.drawStyledText(context, setting.getName(), left + 2, y + 4, -8947849);
          String val = setting.getChoiceValue();
@@ -628,7 +620,7 @@ public class ClickGuiScreen extends Screen {
       if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
          LiquidGlassRenderer.drawGlassPanel(context, (float)cx, (float)cy, 130.0F, (float)colH, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
       } else {
-         RoundedRectRenderer.draw(context, cx, cy, 130, colH, 8, -871230694);
+         RoundedRectRenderer.draw(context, cx, cy, 130, colH, 8, 0xCC1A0A0F);
       }
 
       RoundedRectRenderer.draw(context, cx, cy, 130, 26, 8, 8, 0, 0, (int)(85.0F * alpha) << 24 | accent.textColor & 16777215);
@@ -651,11 +643,13 @@ public class ClickGuiScreen extends Screen {
             && mouseY >= contentY
             && mouseY < contentY + maxContentH;
          btn.updateHover(hovered);
-         if (mod.isEnabled()) {
-            RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, (int)(68.0F * alpha) << 24 | accent.textColor & 16777215);
-         } else if (btn.hoverAmount > 0.01F) {
+         if (btn.hoverAmount > 0.01F) {
             int hAlpha = (int)(btn.hoverAmount * 32.0F * alpha);
             RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, hAlpha << 24 | 16777215);
+         }
+         if (mod.enabledAnim > 0.01F) {
+            int eAlpha = (int)(mod.enabledAnim * 68.0F * alpha);
+            RoundedRectRenderer.draw(context, cx + 3, y + 1, 124, 16, 4, eAlpha << 24 | accent.textColor & 16777215);
          }
 
          int nameColor = mod.isEnabled() ? -1 : -5592406;
@@ -719,11 +713,8 @@ public class ClickGuiScreen extends Screen {
          int sh = 8;
          int tx = right - sw - 2;
          int ty = y + 8 - sh / 2;
-         int bgColor = setting.getBool() ? -1157627904 | accent.textColor & 16777215 : 1145324612;
-         RoundedRectRenderer.draw(context, tx, ty, sw, sh, sh / 2, bgColor);
-         int knobD = sh - 2;
-         int knobX = setting.getBool() ? tx + sw - knobD - 1 : tx + 1;
-         RoundedRectRenderer.draw(context, knobX, ty + 1, knobD, knobD, knobD / 2, -1);
+         int onBg = 0xBB000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, tx, ty, sw, sh, setting.toggleAnim, 0x44303030, onBg);
       } else if (setting.getType() == ModuleSetting.Type.CHOICE) {
          this.drawStyledText(context, setting.getName(), left + 2, y + 4, -8947849);
          String val = setting.getChoiceValue();
@@ -749,9 +740,7 @@ public class ClickGuiScreen extends Screen {
    }
 
    private Text styledText(String text) {
-      return GuiSettings.isCustomFontEnabled()
-         ? Text.literal(text).styled(style -> style.withFont(CUSTOM_FONT))
-         : Text.literal(text);
+      return com.pathdlc.digger.render.StyledTextCache.get(text, CUSTOM_FONT);
    }
 
    private void drawStyledText(DrawContext context, String text, int x, int y, int color) {
@@ -759,8 +748,18 @@ public class ClickGuiScreen extends Screen {
    }
 
    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-      if (this.isDogenLayout()) {
-         return this.mouseClickedDogen(mouseX, mouseY, button);
+      Style style = this.getStyle();
+      switch (style) {
+         case DOGEN:
+            return this.mouseClickedDogen(mouseX, mouseY, button);
+         case TABS:
+            return this.mouseClickedTabs(mouseX, mouseY, button);
+         case COMPACT:
+            return this.mouseClickedCompact(mouseX, mouseY, button);
+         case CARDS:
+            return this.mouseClickedCards(mouseX, mouseY, button);
+         default:
+            break;
       }
 
       int sx = this.startX();
@@ -955,8 +954,18 @@ public class ClickGuiScreen extends Screen {
    }
 
    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-      if (this.isDogenLayout()) {
-         return this.mouseScrolledDogen(mouseX, mouseY, horizontalAmount, verticalAmount);
+      Style style = this.getStyle();
+      switch (style) {
+         case DOGEN:
+            return this.mouseScrolledDogen(mouseX, mouseY, horizontalAmount, verticalAmount);
+         case TABS:
+            return this.mouseScrolledTabs(mouseX, mouseY, horizontalAmount, verticalAmount);
+         case COMPACT:
+            return this.mouseScrolledCompact(mouseX, mouseY, horizontalAmount, verticalAmount);
+         case CARDS:
+            return this.mouseScrolledCards(mouseX, mouseY, horizontalAmount, verticalAmount);
+         default:
+            break;
       }
 
       int sx = this.startX();
@@ -1016,6 +1025,658 @@ public class ClickGuiScreen extends Screen {
       } else {
          return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
       }
+   }
+
+   private void drawPanelBg(DrawContext context, int x, int y, int w, int h, GuiSettings.AccentColor accent) {
+      if (PerformanceSettings.useGlassEffect() && LiquidGlassRenderer.isReady()) {
+         LiquidGlassRenderer.drawGlassPanel(context, (float)x, (float)y, (float)w, (float)h, 8.0F, 0.0F, 0.08F, accent.r, accent.g, accent.b);
+      } else {
+         RoundedRectRenderer.draw(context, x, y, w, h, 8, 0xCC1A0A0F);
+      }
+   }
+
+   private void drawBrandRow(DrawContext context, int x, int y, int h, GuiSettings.AccentColor accent) {
+      int logoSize = Math.min(20, h - 8);
+      int logoY = y + h / 2 - logoSize / 2;
+      context.drawTexture(
+         RenderLayer::getGuiTextured,
+         LOGO,
+         x + 8,
+         logoY,
+         0.0F,
+         0.0F,
+         logoSize,
+         logoSize,
+         logoSize,
+         logoSize
+      );
+      int textY = y + h / 2 - this.textRenderer.fontHeight / 2;
+      this.drawStyledText(context, "WareVisuals", x + 8 + logoSize + 6, textY, accent.textColor);
+   }
+
+   private int brandRowWidth(int logoSize) {
+      int textW = this.textRenderer.getWidth(this.styledText("WareVisuals"));
+      return 8 + logoSize + 6 + textW + 8;
+   }
+
+   private int tabsStartX() {
+      return (this.width - TABS_PANEL_W) / 2;
+   }
+
+   private int tabsStartY() {
+      return (this.height - TABS_PANEL_H) / 2;
+   }
+
+   private int tabsContentY() {
+      return this.tabsStartY() + TABS_BAR_H + TABS_GAP;
+   }
+
+   private int tabsContentH() {
+      return TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+   }
+
+   private void renderTabsLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      if (this.tabsSelectedCategory < 0 || this.tabsSelectedCategory >= this.categories.size()) {
+         this.tabsSelectedCategory = 0;
+      }
+      float alpha = this.openProgress;
+      float slideOffset = (1.0F - alpha) * 24.0F;
+      int sx = this.tabsStartX();
+      int sy = this.tabsStartY() + (int)slideOffset;
+
+      this.drawPanelBg(context, sx, sy, TABS_PANEL_W, TABS_BAR_H, accent);
+      this.drawBrandRow(context, sx, sy, TABS_BAR_H, accent);
+      int brandW = this.brandRowWidth(20);
+      int sepX = sx + brandW;
+      context.fill(sepX, sy + 8, sepX + 1, sy + TABS_BAR_H - 8, 0x40FFFFFF);
+
+      int tabsX = sepX + 8;
+      int tabsRight = sx + TABS_PANEL_W - 8;
+      int availW = tabsRight - tabsX;
+      int gap = 4;
+      int tabH = TABS_BAR_H - 12;
+      int totalTextW = 0;
+      for (Category cat : this.categories) {
+         totalTextW += this.textRenderer.getWidth(this.styledText(cat.getName())) + 16;
+      }
+      totalTextW += gap * (this.categories.size() - 1);
+      int extra = Math.max(0, (availW - totalTextW) / Math.max(1, this.categories.size()));
+      int tx = tabsX;
+      int ty = sy + 6;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         int tw = this.textRenderer.getWidth(this.styledText(cat.getName())) + 16 + extra;
+         boolean selected = i == this.tabsSelectedCategory;
+         boolean hovered = mouseX >= tx && mouseX <= tx + tw && mouseY >= ty && mouseY < ty + tabH;
+         if (selected) {
+            RoundedRectRenderer.draw(context, tx, ty, tw, tabH, 5, (int)(110.0F * alpha) << 24 | accent.textColor & 0xFFFFFF);
+         } else if (hovered) {
+            int hAlpha = (int)(40.0F * alpha);
+            RoundedRectRenderer.draw(context, tx, ty, tw, tabH, 5, hAlpha << 24 | 0xFFFFFF);
+         }
+         int textColor = selected ? -1 : -3355444;
+         int labelW = this.textRenderer.getWidth(this.styledText(cat.getName()));
+         this.drawStyledText(context, cat.getName(), tx + tw / 2 - labelW / 2, ty + tabH / 2 - this.textRenderer.fontHeight / 2, textColor);
+         tx += tw + gap;
+      }
+
+      int contentX = sx;
+      int contentY = sy + TABS_BAR_H + TABS_GAP;
+      int contentW = TABS_PANEL_W;
+      int contentH = TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+      this.drawPanelBg(context, contentX, contentY, contentW, contentH, accent);
+
+      Category selectedCat = this.categories.get(this.tabsSelectedCategory);
+      String key = "tabs:" + selectedCat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      context.enableScissor(contentX + 2, contentY + 2, contentX + contentW - 2, contentY + contentH - 2);
+      int rowY = contentY + 8 - scroll;
+      for (ModuleButton btn : selectedCat.getModules()) {
+         Module mod = btn.getModule();
+         int rowH = TABS_MODULE_H;
+         boolean hovered = mouseX >= contentX + 8 && mouseX <= contentX + contentW - 8
+            && mouseY >= rowY && mouseY < rowY + rowH
+            && mouseY >= contentY + 2 && mouseY < contentY + contentH - 2;
+         btn.updateHover(hovered);
+         if (btn.hoverAmount > 0.01F) {
+            int hAlpha = (int)(btn.hoverAmount * 36.0F * alpha);
+            RoundedRectRenderer.draw(context, contentX + 8, rowY, contentW - 16, rowH, 5, hAlpha << 24 | 0xFFFFFF);
+         }
+         if (mod.enabledAnim > 0.01F) {
+            int eAlpha = (int)(mod.enabledAnim * 78.0F * alpha);
+            RoundedRectRenderer.draw(context, contentX + 8, rowY, contentW - 16, rowH, 5, eAlpha << 24 | accent.textColor & 0xFFFFFF);
+         }
+         int nameColor = mod.isEnabled() ? -1 : -3355444;
+         this.drawStyledText(context, mod.getName(), contentX + 16, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
+         int sw = 22;
+         int sh = 12;
+         int toggleX = contentX + contentW - 16 - sw;
+         int toggleY = rowY + rowH / 2 - sh / 2;
+         int onBg = 0xC0000000 | (accent.textColor & 0xFFFFFF);
+         this.drawAnimToggle(context, toggleX, toggleY, sw, sh, mod.enabledAnim, 0x66333333, onBg);
+         if (mod.hasSettings()) {
+            String arrow = mod.isSettingsExpanded() ? "v" : ">";
+            this.drawStyledText(context, arrow, toggleX - 14, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
+         }
+         rowY += rowH;
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            for (ModuleSetting setting : mod.getSettings()) {
+               this.renderDogenSetting(context, setting, contentX, rowY, contentW, mouseX, mouseY, accent, alpha);
+               rowY += 16;
+            }
+            rowY += 4;
+         }
+      }
+      context.disableScissor();
+   }
+
+   private boolean mouseClickedTabs(double mouseX, double mouseY, int button) {
+      int sx = this.tabsStartX();
+      int sy = this.tabsStartY();
+      int brandW = this.brandRowWidth(20);
+      int tabsX = sx + brandW + 8;
+      int tabsRight = sx + TABS_PANEL_W - 8;
+      int availW = tabsRight - tabsX;
+      int gap = 4;
+      int tabH = TABS_BAR_H - 12;
+      int totalTextW = 0;
+      for (Category cat : this.categories) {
+         totalTextW += this.textRenderer.getWidth(this.styledText(cat.getName())) + 16;
+      }
+      totalTextW += gap * (this.categories.size() - 1);
+      int extra = Math.max(0, (availW - totalTextW) / Math.max(1, this.categories.size()));
+      int tx = tabsX;
+      int ty = sy + 6;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         int tw = this.textRenderer.getWidth(this.styledText(cat.getName())) + 16 + extra;
+         if (mouseX >= tx && mouseX <= tx + tw && mouseY >= ty && mouseY < ty + tabH) {
+            this.tabsSelectedCategory = i;
+            return true;
+         }
+         tx += tw + gap;
+      }
+      if (this.tabsSelectedCategory < 0 || this.tabsSelectedCategory >= this.categories.size()) {
+         return super.mouseClicked(mouseX, mouseY, button);
+      }
+      Category selectedCat = this.categories.get(this.tabsSelectedCategory);
+      int contentX = sx;
+      int contentY = sy + TABS_BAR_H + TABS_GAP;
+      int contentW = TABS_PANEL_W;
+      int contentH = TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+      if (mouseX < contentX + 8 || mouseX > contentX + contentW - 8 || mouseY < contentY + 2 || mouseY > contentY + contentH - 2) {
+         return super.mouseClicked(mouseX, mouseY, button);
+      }
+      String key = "tabs:" + selectedCat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      int rowY = contentY + 8 - scroll;
+      for (ModuleButton btn : selectedCat.getModules()) {
+         Module mod = btn.getModule();
+         int rowH = TABS_MODULE_H;
+         if (mouseY >= rowY && mouseY < rowY + rowH) {
+            int sw = 22;
+            int toggleX = contentX + contentW - 16 - sw;
+            boolean clickedToggle = mouseX >= toggleX && mouseX <= toggleX + sw;
+            if (button == 0) {
+               if (clickedToggle) {
+                  mod.toggle();
+               } else if (mod.hasSettings()) {
+                  mod.toggleSettingsExpanded();
+               } else {
+                  mod.toggle();
+               }
+            } else if (button == 1 && mod.hasSettings()) {
+               mod.toggleSettingsExpanded();
+            }
+            return true;
+         }
+         rowY += rowH;
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            for (ModuleSetting setting : mod.getSettings()) {
+               if (mouseY >= rowY && mouseY < rowY + 16) {
+                  this.handleDogenSettingClick(setting, contentX, contentW, rowY, mouseX);
+                  return true;
+               }
+               rowY += 16;
+            }
+            rowY += 4;
+         }
+      }
+      return true;
+   }
+
+   private boolean mouseScrolledTabs(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      int sx = this.tabsStartX();
+      int sy = this.tabsStartY();
+      int contentX = sx;
+      int contentY = sy + TABS_BAR_H + TABS_GAP;
+      int contentW = TABS_PANEL_W;
+      int contentH = TABS_PANEL_H - TABS_BAR_H - TABS_GAP;
+      if (mouseX < contentX || mouseX > contentX + contentW || mouseY < contentY || mouseY > contentY + contentH
+         || this.tabsSelectedCategory < 0 || this.tabsSelectedCategory >= this.categories.size()) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      Category cat = this.categories.get(this.tabsSelectedCategory);
+      String key = "tabs:" + cat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      scroll -= (int)(verticalAmount * 10.0);
+      int totalH = 8;
+      for (ModuleButton btn : cat.getModules()) {
+         totalH += TABS_MODULE_H;
+         Module mod = btn.getModule();
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            totalH += mod.getSettings().size() * 16 + 4;
+         }
+      }
+      int maxScroll = Math.max(0, totalH - contentH);
+      scroll = Math.max(0, Math.min(maxScroll, scroll));
+      this.scrollOffsets.put(key, scroll);
+      return true;
+   }
+
+   private int compactStartX() {
+      return 16;
+   }
+
+   private int compactStartY() {
+      return 20;
+   }
+
+   private int compactPanelH() {
+      return Math.min(this.height - 40, 24 + COMPACT_HEADER_H + this.compactTotalContentH() + 8);
+   }
+
+   private int compactTotalContentH() {
+      int total = 0;
+      for (Category cat : this.categories) {
+         total += COMPACT_CAT_H;
+         if (Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()))) {
+            for (ModuleButton btn : cat.getModules()) {
+               total += COMPACT_MODULE_H;
+               Module mod = btn.getModule();
+               if (mod.isSettingsExpanded() && mod.hasSettings()) {
+                  total += mod.getSettings().size() * 16 + 4;
+               }
+            }
+         }
+      }
+      return total;
+   }
+
+   private void renderCompactLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      float alpha = this.openProgress;
+      int slide = (int)((1.0F - alpha) * -30.0F);
+      int sx = this.compactStartX() + slide;
+      int sy = this.compactStartY();
+      int w = COMPACT_PANEL_W;
+      int h = this.compactPanelH();
+      this.drawPanelBg(context, sx, sy, w, h, accent);
+      this.drawBrandRow(context, sx, sy, COMPACT_HEADER_H, accent);
+      RoundedRectRenderer.draw(context, sx + 6, sy + COMPACT_HEADER_H, w - 12, 1, 0, 0x30FFFFFF);
+
+      int contentTop = sy + COMPACT_HEADER_H + 4;
+      int contentBottom = sy + h - 4;
+      int viewportH = contentBottom - contentTop;
+      int totalH = this.compactTotalContentH();
+      int maxScroll = Math.max(0, totalH - viewportH);
+      int scroll = Math.max(0, Math.min(maxScroll, this.scrollOffsets.getOrDefault("compact:scroll", 0)));
+      this.scrollOffsets.put("compact:scroll", scroll);
+      context.enableScissor(sx + 2, contentTop, sx + w - 2, contentBottom);
+      int y = contentTop - scroll;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         boolean expanded = Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()));
+         boolean hovered = mouseX >= sx + 6 && mouseX <= sx + w - 6 && mouseY >= y && mouseY < y + COMPACT_CAT_H;
+         if (hovered) {
+            int hAlpha = (int)(36.0F * alpha);
+            RoundedRectRenderer.draw(context, sx + 6, y, w - 12, COMPACT_CAT_H, 4, hAlpha << 24 | 0xFFFFFF);
+         }
+         int enabledCount = 0;
+         for (ModuleButton btn : cat.getModules()) {
+            if (btn.getModule().isEnabled()) {
+               enabledCount++;
+            }
+         }
+         this.drawStyledText(context, cat.getName(), sx + 12, y + COMPACT_CAT_H / 2 - this.textRenderer.fontHeight / 2, expanded ? accent.textColor : -1);
+         String count = enabledCount + "/" + cat.getModules().size();
+         int countW = this.textRenderer.getWidth(this.styledText(count));
+         this.drawStyledText(context, count, sx + w - 18 - countW, y + COMPACT_CAT_H / 2 - this.textRenderer.fontHeight / 2, -7829368);
+         String arrow = expanded ? "v" : ">";
+         this.drawStyledText(context, arrow, sx + w - 14, y + COMPACT_CAT_H / 2 - this.textRenderer.fontHeight / 2, accent.textColor);
+         y += COMPACT_CAT_H;
+         if (expanded) {
+            for (ModuleButton btn : cat.getModules()) {
+               Module mod = btn.getModule();
+               int rowH = COMPACT_MODULE_H;
+               boolean rowHover = mouseX >= sx + 14 && mouseX <= sx + w - 6 && mouseY >= y && mouseY < y + rowH;
+               btn.updateHover(rowHover);
+               if (btn.hoverAmount > 0.01F) {
+                  int hAlpha = (int)(btn.hoverAmount * 30.0F * alpha);
+                  RoundedRectRenderer.draw(context, sx + 14, y, w - 20, rowH, 4, hAlpha << 24 | 0xFFFFFF);
+               }
+               if (mod.enabledAnim > 0.01F) {
+                  int eAlpha = (int)(mod.enabledAnim * 70.0F * alpha);
+                  RoundedRectRenderer.draw(context, sx + 14, y, w - 20, rowH, 4, eAlpha << 24 | accent.textColor & 0xFFFFFF);
+               }
+               int nameColor = mod.isEnabled() ? -1 : -5592406;
+               this.drawStyledText(context, mod.getName(), sx + 18, y + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
+               if (mod.hasSettings()) {
+                  String marrow = mod.isSettingsExpanded() ? "v" : ">";
+                  this.drawStyledText(context, marrow, sx + w - 16, y + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
+               }
+               y += rowH;
+               if (mod.isSettingsExpanded() && mod.hasSettings()) {
+                  for (ModuleSetting setting : mod.getSettings()) {
+                     this.renderDogenSetting(context, setting, sx, y, w, mouseX, mouseY, accent, alpha);
+                     y += 16;
+                  }
+                  y += 4;
+               }
+            }
+         }
+      }
+      context.disableScissor();
+   }
+
+   private boolean mouseClickedCompact(double mouseX, double mouseY, int button) {
+      int sx = this.compactStartX();
+      int sy = this.compactStartY();
+      int w = COMPACT_PANEL_W;
+      int h = this.compactPanelH();
+      int contentTop = sy + COMPACT_HEADER_H + 4;
+      int contentBottom = sy + h - 4;
+      if (mouseY < contentTop || mouseY > contentBottom || mouseX < sx + 6 || mouseX > sx + w - 6) {
+         return super.mouseClicked(mouseX, mouseY, button);
+      }
+      int scroll = this.scrollOffsets.getOrDefault("compact:scroll", 0);
+      int y = contentTop - scroll;
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         boolean expanded = Boolean.TRUE.equals(this.compactExpanded.get(cat.getName()));
+         if (mouseY >= y && mouseY < y + COMPACT_CAT_H) {
+            this.compactExpanded.put(cat.getName(), !expanded);
+            return true;
+         }
+         y += COMPACT_CAT_H;
+         if (expanded) {
+            for (ModuleButton btn : cat.getModules()) {
+               Module mod = btn.getModule();
+               int rowH = COMPACT_MODULE_H;
+               if (mouseY >= y && mouseY < y + rowH) {
+                  if (button == 0) {
+                     if (mod.hasSettings() && mouseX >= sx + w - 22) {
+                        mod.toggleSettingsExpanded();
+                     } else {
+                        mod.toggle();
+                     }
+                  } else if (button == 1 && mod.hasSettings()) {
+                     mod.toggleSettingsExpanded();
+                  }
+                  return true;
+               }
+               y += rowH;
+               if (mod.isSettingsExpanded() && mod.hasSettings()) {
+                  for (ModuleSetting setting : mod.getSettings()) {
+                     if (mouseY >= y && mouseY < y + 16) {
+                        this.handleDogenSettingClick(setting, sx, w, y, mouseX);
+                        return true;
+                     }
+                     y += 16;
+                  }
+                  y += 4;
+               }
+            }
+         }
+      }
+      return super.mouseClicked(mouseX, mouseY, button);
+   }
+
+   private boolean mouseScrolledCompact(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      int sx = this.compactStartX();
+      int sy = this.compactStartY();
+      int w = COMPACT_PANEL_W;
+      int h = this.compactPanelH();
+      if (mouseX < sx || mouseX > sx + w || mouseY < sy || mouseY > sy + h) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      int viewportH = h - COMPACT_HEADER_H - 8;
+      int totalH = this.compactTotalContentH();
+      int maxScroll = Math.max(0, totalH - viewportH);
+      int scroll = this.scrollOffsets.getOrDefault("compact:scroll", 0);
+      scroll -= (int)(verticalAmount * 12.0);
+      scroll = Math.max(0, Math.min(maxScroll, scroll));
+      this.scrollOffsets.put("compact:scroll", scroll);
+      return true;
+   }
+
+   private int cardsRows() {
+      return (this.categories.size() + CARDS_COLS - 1) / CARDS_COLS;
+   }
+
+   private int cardsGridW() {
+      return CARDS_COLS * CARDS_W + (CARDS_COLS - 1) * CARDS_GAP;
+   }
+
+   private int cardsGridH() {
+      return this.cardsRows() * CARDS_H + (this.cardsRows() - 1) * CARDS_GAP;
+   }
+
+   private int cardsGridX() {
+      return (this.width - this.cardsGridW()) / 2;
+   }
+
+   private int cardsGridY() {
+      return Math.max(80, (this.height - this.cardsGridH()) / 2);
+   }
+
+   private void renderCardsLayout(DrawContext context, int mouseX, int mouseY, GuiSettings.AccentColor accent) {
+      float alpha = this.openProgress;
+      int brandW = this.brandRowWidth(22);
+      int brandH = 32;
+      int brandX = (this.width - brandW) / 2;
+      int brandY = this.cardsGridY() - brandH - 12 + (int)((1.0F - alpha) * -10.0F);
+      this.drawPanelBg(context, brandX, brandY, brandW, brandH, accent);
+      this.drawBrandRow(context, brandX, brandY, brandH, accent);
+
+      int gx = this.cardsGridX();
+      int gy = this.cardsGridY();
+      for (int i = 0; i < this.categories.size(); i++) {
+         Category cat = this.categories.get(i);
+         int row = i / CARDS_COLS;
+         int col = i % CARDS_COLS;
+         int cardSlide = (int)((1.0F - alpha) * (float)(20 + (row + col) * 8));
+         int x = gx + col * (CARDS_W + CARDS_GAP);
+         int y = gy + row * (CARDS_H + CARDS_GAP) + cardSlide;
+         boolean hovered = mouseX >= x && mouseX <= x + CARDS_W && mouseY >= y && mouseY < y + CARDS_H;
+         this.drawPanelBg(context, x, y, CARDS_W, CARDS_H, accent);
+         if (hovered) {
+            RoundedRectRenderer.draw(context, x, y, CARDS_W, CARDS_H, 8, 0x18FFFFFF);
+         }
+         int enabledCount = 0;
+         for (ModuleButton btn : cat.getModules()) {
+            if (btn.getModule().isEnabled()) {
+               enabledCount++;
+            }
+         }
+         int nameW = this.textRenderer.getWidth(this.styledText(cat.getName()));
+         this.drawStyledText(context, cat.getName(), x + CARDS_W / 2 - nameW / 2, y + 18, -1);
+         String sub = enabledCount + " / " + cat.getModules().size() + " enabled";
+         int subW = this.textRenderer.getWidth(this.styledText(sub));
+         this.drawStyledText(context, sub, x + CARDS_W / 2 - subW / 2, y + CARDS_H - 18, accent.textColor);
+
+      }
+
+      if (this.cardsOpenCategory >= 0 && this.cardsOpenCategory < this.categories.size()) {
+         context.fill(0, 0, this.width, this.height, 0xA0000000);
+         int ow = CARDS_OVERLAY_W;
+         int oh = CARDS_OVERLAY_H;
+         int ox = (this.width - ow) / 2;
+         int oy = (this.height - oh) / 2;
+         this.drawPanelBg(context, ox, oy, ow, oh, accent);
+         Category openCat = this.categories.get(this.cardsOpenCategory);
+         this.drawBrandRow(context, ox, oy, 30, accent);
+         int brandRowW = this.brandRowWidth(20);
+         int sepX = ox + brandRowW;
+         context.fill(sepX, oy + 8, sepX + 1, oy + 30 - 8, 0x40FFFFFF);
+         this.drawStyledText(context, openCat.getName(), sepX + 8, oy + 30 / 2 - this.textRenderer.fontHeight / 2, -1);
+         String closeStr = "x";
+         int closeW = this.textRenderer.getWidth(this.styledText(closeStr));
+         this.drawStyledText(context, closeStr, ox + ow - 12 - closeW, oy + 30 / 2 - this.textRenderer.fontHeight / 2, accent.textColor);
+
+         int listTop = oy + 30 + 4;
+         int listBottom = oy + oh - 6;
+         String key = "cards:" + openCat.getName();
+         int scroll = this.scrollOffsets.getOrDefault(key, 0);
+         context.enableScissor(ox + 4, listTop, ox + ow - 4, listBottom);
+         int rowY = listTop + 2 - scroll;
+         for (ModuleButton btn : openCat.getModules()) {
+            Module mod = btn.getModule();
+            int rowH = 22;
+            boolean rowHover = mouseX >= ox + 8 && mouseX <= ox + ow - 8 && mouseY >= rowY && mouseY < rowY + rowH
+               && mouseY >= listTop && mouseY < listBottom;
+            btn.updateHover(rowHover);
+            if (btn.hoverAmount > 0.01F) {
+               int hAlpha = (int)(btn.hoverAmount * 32.0F * alpha);
+               RoundedRectRenderer.draw(context, ox + 8, rowY, ow - 16, rowH, 5, hAlpha << 24 | 0xFFFFFF);
+            }
+            if (mod.enabledAnim > 0.01F) {
+               int eAlpha = (int)(mod.enabledAnim * 76.0F * alpha);
+               RoundedRectRenderer.draw(context, ox + 8, rowY, ow - 16, rowH, 5, eAlpha << 24 | accent.textColor & 0xFFFFFF);
+            }
+            int nameColor = mod.isEnabled() ? -1 : -3355444;
+            this.drawStyledText(context, mod.getName(), ox + 16, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, nameColor);
+            int sw = 22;
+            int sh = 12;
+            int toggleX = ox + ow - 16 - sw;
+            int toggleY = rowY + rowH / 2 - sh / 2;
+            int onBg = 0xC0000000 | (accent.textColor & 0xFFFFFF);
+            this.drawAnimToggle(context, toggleX, toggleY, sw, sh, mod.enabledAnim, 0x66333333, onBg);
+            if (mod.hasSettings()) {
+               String marrow = mod.isSettingsExpanded() ? "v" : ">";
+               this.drawStyledText(context, marrow, toggleX - 14, rowY + rowH / 2 - this.textRenderer.fontHeight / 2, mod.isSettingsExpanded() ? accent.textColor : -8947849);
+            }
+            rowY += rowH;
+            if (mod.isSettingsExpanded() && mod.hasSettings()) {
+               for (ModuleSetting setting : mod.getSettings()) {
+                  this.renderDogenSetting(context, setting, ox, rowY, ow, mouseX, mouseY, accent, alpha);
+                  rowY += 16;
+               }
+               rowY += 4;
+            }
+         }
+         context.disableScissor();
+      }
+   }
+
+   private boolean mouseClickedCards(double mouseX, double mouseY, int button) {
+      if (this.cardsOpenCategory >= 0 && this.cardsOpenCategory < this.categories.size()) {
+         int ow = CARDS_OVERLAY_W;
+         int oh = CARDS_OVERLAY_H;
+         int ox = (this.width - ow) / 2;
+         int oy = (this.height - oh) / 2;
+         if (mouseX < ox || mouseX > ox + ow || mouseY < oy || mouseY > oy + oh) {
+            this.cardsOpenCategory = -1;
+            return true;
+         }
+         int closeW = this.textRenderer.getWidth(this.styledText("x"));
+         if (mouseX >= ox + ow - 14 - closeW && mouseX <= ox + ow - 4 && mouseY >= oy + 4 && mouseY < oy + 30 - 4) {
+            this.cardsOpenCategory = -1;
+            return true;
+         }
+         Category openCat = this.categories.get(this.cardsOpenCategory);
+         int listTop = oy + 30 + 4;
+         int listBottom = oy + oh - 6;
+         if (mouseY < listTop || mouseY > listBottom) {
+            return true;
+         }
+         String key = "cards:" + openCat.getName();
+         int scroll = this.scrollOffsets.getOrDefault(key, 0);
+         int rowY = listTop + 2 - scroll;
+         for (ModuleButton btn : openCat.getModules()) {
+            Module mod = btn.getModule();
+            int rowH = 22;
+            if (mouseY >= rowY && mouseY < rowY + rowH) {
+               int sw = 22;
+               int toggleX = ox + ow - 16 - sw;
+               boolean clickedToggle = mouseX >= toggleX && mouseX <= toggleX + sw;
+               if (button == 0) {
+                  if (clickedToggle) {
+                     mod.toggle();
+                  } else if (mod.hasSettings()) {
+                     mod.toggleSettingsExpanded();
+                  } else {
+                     mod.toggle();
+                  }
+               } else if (button == 1 && mod.hasSettings()) {
+                  mod.toggleSettingsExpanded();
+               }
+               return true;
+            }
+            rowY += rowH;
+            if (mod.isSettingsExpanded() && mod.hasSettings()) {
+               for (ModuleSetting setting : mod.getSettings()) {
+                  if (mouseY >= rowY && mouseY < rowY + 16) {
+                     this.handleDogenSettingClick(setting, ox, ow, rowY, mouseX);
+                     return true;
+                  }
+                  rowY += 16;
+               }
+               rowY += 4;
+            }
+         }
+         return true;
+      }
+      int gx = this.cardsGridX();
+      int gy = this.cardsGridY();
+      for (int i = 0; i < this.categories.size(); i++) {
+         int row = i / CARDS_COLS;
+         int col = i % CARDS_COLS;
+         int x = gx + col * (CARDS_W + CARDS_GAP);
+         int y = gy + row * (CARDS_H + CARDS_GAP);
+         if (mouseX >= x && mouseX <= x + CARDS_W && mouseY >= y && mouseY < y + CARDS_H) {
+            this.cardsOpenCategory = i;
+            return true;
+         }
+      }
+      return super.mouseClicked(mouseX, mouseY, button);
+   }
+
+   private boolean mouseScrolledCards(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      if (this.cardsOpenCategory < 0 || this.cardsOpenCategory >= this.categories.size()) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      int ow = CARDS_OVERLAY_W;
+      int oh = CARDS_OVERLAY_H;
+      int ox = (this.width - ow) / 2;
+      int oy = (this.height - oh) / 2;
+      if (mouseX < ox || mouseX > ox + ow || mouseY < oy || mouseY > oy + oh) {
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      }
+      Category cat = this.categories.get(this.cardsOpenCategory);
+      String key = "cards:" + cat.getName();
+      int scroll = this.scrollOffsets.getOrDefault(key, 0);
+      scroll -= (int)(verticalAmount * 10.0);
+      int totalH = 4;
+      for (ModuleButton btn : cat.getModules()) {
+         totalH += 22;
+         Module mod = btn.getModule();
+         if (mod.isSettingsExpanded() && mod.hasSettings()) {
+            totalH += mod.getSettings().size() * 16 + 4;
+         }
+      }
+      int viewH = oh - 30 - 10;
+      int maxScroll = Math.max(0, totalH - viewH);
+      scroll = Math.max(0, Math.min(maxScroll, scroll));
+      this.scrollOffsets.put(key, scroll);
+      return true;
+   }
+
+   public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+      if (this.getStyle() == Style.CARDS && this.cardsOpenCategory >= 0 && keyCode == 256) {
+         this.cardsOpenCategory = -1;
+         return true;
+      }
+      return super.keyPressed(keyCode, scanCode, modifiers);
    }
 
    public boolean shouldPause() {
