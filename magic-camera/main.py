@@ -121,7 +121,8 @@ def main():
         active_hands = []
         if hand_results.multi_hand_landmarks:
             for idx, hand_lm in enumerate(hand_results.multi_hand_landmarks):
-                hand_id = f"hand_{idx}"
+                label = hand_results.multi_handedness[idx].classification[0].label
+                hand_id = f"hand_{label}"
                 active_hands.append(hand_id)
                 effects.feed_hand(hand_id, hand_lm.landmark, w, h)
         effects.clear_inactive_hands(active_hands)

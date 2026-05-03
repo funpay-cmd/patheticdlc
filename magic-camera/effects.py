@@ -99,11 +99,15 @@ class MagicEffects:
         self.palette_index += 1
 
     def clear_inactive_hands(self, active_hand_ids: list[str]):
-        """Remove portals and trails for hands no longer in frame."""
+        """Remove portals, trails, and prev_positions for hands no longer in frame."""
         for key in list(self.portal_angles):
             hand_id = key.replace("portal_", "")
             if hand_id not in active_hand_ids:
                 del self.portal_angles[key]
+        for key in list(self.trails):
+            hand_id = key.rsplit("_", 1)[0]
+            if hand_id not in active_hand_ids:
+                del self.trails[key]
         for key in list(self.prev_positions):
             hand_id = key.rsplit("_", 1)[0]
             if hand_id not in active_hand_ids:
