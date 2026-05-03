@@ -5,7 +5,7 @@ Particle and magic effects system — Doctor Strange style.
 import math
 import random
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -98,6 +98,17 @@ class MagicEffects:
     def cycle_palette(self):
         self.palette_index += 1
 
+    def clear_inactive_hands(self, active_hand_ids: list[str]):
+        """Remove portals and trails for hands no longer in frame."""
+        for key in list(self.portal_angles):
+            hand_id = key.replace("portal_", "")
+            if hand_id not in active_hand_ids:
+                del self.portal_angles[key]
+        for key in list(self.prev_positions):
+            hand_id = key.rsplit("_", 1)[0]
+            if hand_id not in active_hand_ids:
+                del self.prev_positions[key]
+
     # ── update loop ──────────────────────────────────────────────────────
 
     def update(self):
@@ -177,9 +188,11 @@ class MagicEffects:
 
         # portal around wrist when fingers spread
         spread = self._finger_spread(landmarks, w, h)
+        portal_key = f"portal_{hand_id}"
         if spread > 60:
-            portal_key = f"portal_{hand_id}"
             self.portal_angles.setdefault(portal_key, 0.0)
+        else:
+            self.portal_angles.pop(portal_key, None)
 
         # trim particles
         if len(self.particles) > self.max_particles:
