@@ -7,14 +7,23 @@ import net.minecraft.util.math.MathHelper;
 /**
  * Manages server-side vs client-side rotations for Silent Aim.
  * Applies GCD spoofing to all outgoing rotation deltas.
+ *
+ * The mixin in SilentRotationMixin swaps player rotation before sendMovementPackets()
+ * so the movement packet contains serverYaw/serverPitch, then restores the visual rotation after.
+ *
+ * GCD: Minecraft server computes mouse sensitivity as:
+ *   f = sensitivity * 0.6 + 0.2
+ *   gcd = f^3 * 1.2
+ * All rotation deltas must be multiples of this GCD value.
  */
 public final class RotationHandler {
 
     private static boolean active;
 
-    // Server-side rotation (what the server sees)
+    // Server-side rotation (what the server sees via movement packets)
     private static float serverYaw;
     private static float serverPitch;
+
     // Stored visual rotation for restore after packet send
     private static float visualYaw;
     private static float visualPitch;
@@ -23,7 +32,6 @@ public final class RotationHandler {
 
     // GCD state
     private static float gcdValue = 0.0F;
-    private static float fakeSensitivity = 0.5F;
 
     // Previous server rotation for delta computation
     private static float prevServerYaw;
@@ -79,7 +87,6 @@ public final class RotationHandler {
      * gcd = f^3 * 1.2
      */
     public static void updateGCD(float sensitivity) {
-        fakeSensitivity = sensitivity;
         float f = sensitivity * 0.6F + 0.2F;
         gcdValue = f * f * f * 1.2F;
     }
@@ -131,6 +138,7 @@ public final class RotationHandler {
     /**
      * Called by mixin BEFORE sendMovementPackets().
      * Saves visual rotation and swaps player rotation to server values.
+     * This ensures the movement packet sent to the server contains our aim rotation.
      */
     public static void onPreSendMovementPackets() {
         if (!active) return;
@@ -150,7 +158,7 @@ public final class RotationHandler {
 
     /**
      * Called by mixin AFTER sendMovementPackets().
-     * Restores visual rotation.
+     * Restores visual rotation so the player's camera doesn't jump.
      */
     public static void onPostSendMovementPackets() {
         if (!active) return;

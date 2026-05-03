@@ -81,6 +81,7 @@ public class ClickGuiScreen extends Screen {
          killAura.addSetting(ModuleSetting.slider("Reaction ms", 180.0F, 50.0F, 350.0F, 10.0F));
          killAura.addSetting(ModuleSetting.slider("GCD Sens", 0.5F, 0.0F, 1.0F, 0.01F));
          killAura.addSetting(ModuleSetting.choice("Target Mode", new String[]{"Distance", "Health", "Angle"}, 0));
+         killAura.addSetting(ModuleSetting.choice("Rotation", new String[]{"Linear", "Bezier", "Cinematic"}, 1));
          killAura.addSetting(ModuleSetting.toggle("Silent Aim", true));
          killAura.addSetting(ModuleSetting.toggle("GCD Fix", true));
          killAura.addSetting(ModuleSetting.toggle("Smart Aim", true));

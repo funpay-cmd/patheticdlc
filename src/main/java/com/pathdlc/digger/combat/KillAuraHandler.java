@@ -14,27 +14,28 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
 /**
- * Advanced KillAura with 8 anti-cheat bypass techniques:
+ * KillAura with proper anti-cheat bypass.
  *
- * 1. Silent Aim — server-side only rotation via packet interception
- * 2. GCD Spoofing — deltas rounded to sensitivity-based GCD
- * 3. Smooth / Interpolated rotations with overshoot
- * 4. Humanization — jitter, intentional misses, reaction time
- * 5. Weighted hit selection (dist / FOV / HP / time)
- * 6. Click humanization — Gaussian CPS, double-clicks, skips
- * 7. Pre-aim — rotate toward target 1-3 ticks before attack
- * 8. Movement-aware — body yaw synced with movement direction
+ * Key insight from Grim source analysis:
+ * Grim traces a ray from (player.x, player.y+eyeHeight, player.z) along the
+ * look direction derived from (player.yaw, player.pitch) in the movement packet.
+ * If this ray does NOT intersect the target entity's bounding box within reach,
+ * the attack is cancelled with a HITBOX flag.
+ *
+ * Therefore: the server rotation MUST point at the target's hitbox.
+ * All humanization noise is applied to the VISUAL rotation only (when silent aim is ON).
+ * When silent aim is OFF, noise is applied to the actual rotation (which IS the server rotation).
+ *
+ * Sprint reset packets removed — Grim's PacketOrder checks flag sprint toggle around attacks.
  */
 public final class KillAuraHandler {
 
@@ -42,20 +43,14 @@ public final class KillAuraHandler {
     private static LivingEntity currentTarget;
     private static int switchTimer;
     private static int ticksSinceAttack;
-    private static boolean isAiming;
 
     // --- Reaction time ---
     private static long targetAcquiredMs;
     private static boolean reactionDelayActive;
 
-    // --- Smooth rotation state ---
+    // --- Smooth rotation state (for non-silent mode) ---
     private static float smoothYaw, smoothPitch;
     private static boolean smoothInitialized;
-
-    // --- Overshoot state ---
-    private static int overshootPhase; // 0=none, 1=overshoot, 2=correct
-    private static int overshootTicks;
-    private static float overshootDeltaYaw, overshootDeltaPitch;
 
     // --- Pre-aim state ---
     private static int preAimTicks;
@@ -69,11 +64,11 @@ public final class KillAuraHandler {
     // --- Micro-pause (fatigue) ---
     private static int pauseTicks;
 
-    // --- Intentional miss ---
+    // --- Intentional miss (only when not silent — visual only) ---
     private static int missTicksRemaining;
     private static float missOffsetYaw, missOffsetPitch;
 
-    // --- Drift simulation ---
+    // --- Drift simulation (visual only) ---
     private static float driftYaw, driftPitch;
     private static float targetDriftYaw, targetDriftPitch;
     private static int driftChangeTicks;
@@ -84,14 +79,16 @@ public final class KillAuraHandler {
     // --- Target switch threshold (generated once per switch cycle) ---
     private static int switchThreshold = 60;
 
-    // --- Anti-cheat bypass: rotation speed tracking ---
-    private static float lastRotationDeltaYaw;
-    private static float lastRotationDeltaPitch;
-    private static boolean largeRotationThisTick;
+    // --- Bezier rotation state ---
+    private static float bezierProgress;
+    private static float bezierStartYaw, bezierStartPitch;
+    private static float bezierCtrl1Yaw, bezierCtrl1Pitch;
+    private static float bezierCtrl2Yaw, bezierCtrl2Pitch;
+    private static float bezierEndYaw, bezierEndPitch;
+    private static boolean bezierActive;
 
-    // --- Sprint reset state ---
-    private static boolean sprintResetQueued;
-    private static int sprintResetTicks;
+    // --- Micro-movement (anti-AFK) ---
+    private static int microMoveTicks;
 
     public static void tick(MinecraftClient client) {
         if (!ModuleManager.isEnabled("KillAura")) {
@@ -108,7 +105,7 @@ public final class KillAuraHandler {
         if (mod == null) return;
 
         // --- Read settings ---
-        float range = getFloat(mod, "Range", 3.2F);
+        float range = getFloat(mod, "Range", 3.0F);
         float aimSpeed = getFloat(mod, "Aim Speed", 55.0F);
         float minAps = getFloat(mod, "Min APS", 8.0F);
         float maxAps = getFloat(mod, "Max APS", 12.0F);
@@ -124,6 +121,7 @@ public final class KillAuraHandler {
         boolean hitPlayers = getBool(mod, "Attack Players");
         boolean moveAware = getBool(mod, "Move Aware");
         String targetMode = getChoice(mod, "Target Mode");
+        String rotProfile = getChoice(mod, "Rotation");
 
         // --- GCD setup ---
         if (gcdFix) {
@@ -152,8 +150,8 @@ public final class KillAuraHandler {
                 currentTarget = null;
                 reactionDelayActive = false;
                 preAimDone = false;
+                bezierActive = false;
             }
-            isAiming = false;
             RotationHandler.setActive(false);
             return;
         }
@@ -165,7 +163,7 @@ public final class KillAuraHandler {
         switchTimer++;
         boolean needSwitch = currentTarget == null
                 || !currentTarget.isAlive()
-                || player.distanceTo(currentTarget) > range + 0.5F
+                || getHitboxAwareDistance(player, currentTarget) > range + 0.5
                 || !targets.contains(currentTarget)
                 || switchTimer > switchThreshold;
 
@@ -175,17 +173,16 @@ public final class KillAuraHandler {
             switchTimer = 0;
             switchThreshold = randInt(40, 80);
             if (prev != currentTarget) {
-                // (4) Reaction time on new target
                 targetAcquiredMs = System.currentTimeMillis();
                 reactionDelayActive = true;
                 preAimDone = false;
                 preAimTicks = randInt(1, 3);
                 smoothInitialized = false;
-                overshootPhase = 0;
+                bezierActive = false;
             }
         }
 
-        // (4) Reaction delay — wait before starting to aim
+        // Reaction delay
         if (reactionDelayActive) {
             float actualReaction = reactionMs + randFloat(-30.0F, 30.0F);
             long elapsed = System.currentTimeMillis() - targetAcquiredMs;
@@ -195,98 +192,128 @@ public final class KillAuraHandler {
             reactionDelayActive = false;
         }
 
-        // --- Compute desired server rotation ---
-        float[] desired = getTargetAngles(player, currentTarget);
+        // --- Compute CLEAN rotation to target hitbox center ---
+        // This is the rotation the SERVER must see for Grim's raycast to hit
+        float[] cleanAngles = getCleanTargetAngles(player, currentTarget);
 
-        // (4) Intentional miss simulation
-        if (missTicksRemaining > 0) {
-            desired[0] += missOffsetYaw;
-            desired[1] += missOffsetPitch;
-            missTicksRemaining--;
-        } else if (rng().nextFloat() < 0.008F) {
-            missTicksRemaining = randInt(3, 8);
-            missOffsetYaw = randFloat(-3.0F, 3.0F);
-            missOffsetPitch = randFloat(-2.0F, 2.0F);
-        }
+        if (silentAim) {
+            // === SILENT AIM MODE ===
+            // Server gets CLEAN rotation (only GCD applied, no noise)
+            // Player camera is unchanged
+            float serverYaw = cleanAngles[0];
+            float serverPitch = cleanAngles[1];
 
-        float newYaw, newPitch;
-        if (humanAim) {
-            // (3) Smooth rotation with adaptive speed
-            float[] smoothed = tickSmoothRotation(player, desired, aimSpeed);
-            newYaw = smoothed[0];
-            newPitch = smoothed[1];
+            // Apply rotation speed limit for safety (Grim doesn't check this,
+            // but some ACs might flag instant 180° snaps)
+            float prevYaw = RotationHandler.getServerYaw();
+            float prevPitch = RotationHandler.getServerPitch();
+            float deltaYaw = MathHelper.wrapDegrees(serverYaw - prevYaw);
+            float deltaPitch = serverPitch - prevPitch;
+            float maxYaw = 45.0F + randFloat(-5.0F, 5.0F);
+            float maxPitch = 35.0F + randFloat(-3.0F, 3.0F);
+            deltaYaw = MathHelper.clamp(deltaYaw, -maxYaw, maxYaw);
+            deltaPitch = MathHelper.clamp(deltaPitch, -maxPitch, maxPitch);
+            serverYaw = prevYaw + deltaYaw;
+            serverPitch = MathHelper.clamp(prevPitch + deltaPitch, -90.0F, 90.0F);
 
-            // (1) Overshoot simulation
-            float[] overshootDeltas = tickOvershoot();
-            newYaw += overshootDeltas[0];
-            newPitch += overshootDeltas[1];
+            RotationHandler.setServerRotation(serverYaw, serverPitch);
+            if (gcdFix) {
+                RotationHandler.applyGCDToServerRotation();
+            }
+            RotationHandler.commitServerRotation();
 
-            // (4) Micro-jitter
-            newYaw += randFloat(-0.4F, 0.4F);
-            newPitch += randFloat(-0.2F, 0.2F);
+            // Movement-aware body yaw (cosmetic — other players see natural body)
+            if (moveAware) {
+                tickMovementAwareBodyYaw(player);
+            }
 
-            // (4) Drift
-            tickDrift();
-            newYaw += driftYaw;
-            newPitch += driftPitch;
-
-            // (4) Micro-tremor (sinusoidal)
-            long ms = System.currentTimeMillis();
-            newYaw += (float)(Math.sin(ms * 0.013) * 0.2 + Math.sin(ms * 0.0037) * 0.12);
-            newPitch += (float)(Math.sin(ms * 0.011) * 0.1 + Math.cos(ms * 0.0029) * 0.06);
         } else {
-            // Direct aim (rage mode) — snap to target with minimal jitter
-            newYaw = desired[0] + randFloat(-0.5F, 0.5F);
-            newPitch = desired[1] + randFloat(-0.3F, 0.3F);
-            smoothInitialized = false;
-        }
+            // === NON-SILENT MODE ===
+            // Player camera rotates toward target with humanization
+            // Server sees what the player sees
+            float newYaw, newPitch;
 
-        newPitch = MathHelper.clamp(newPitch, -90.0F, 90.0F);
+            if (humanAim) {
+                if ("Bezier".equals(rotProfile)) {
+                    float[] bezResult = tickBezierRotation(player, cleanAngles, aimSpeed);
+                    newYaw = bezResult[0];
+                    newPitch = bezResult[1];
+                } else if ("Cinematic".equals(rotProfile)) {
+                    float[] cinResult = tickCinematicRotation(player, cleanAngles, aimSpeed);
+                    newYaw = cinResult[0];
+                    newPitch = cinResult[1];
+                } else {
+                    float[] smoothed = tickSmoothRotation(player, cleanAngles, aimSpeed);
+                    newYaw = smoothed[0];
+                    newPitch = smoothed[1];
+                }
 
-        // --- Anti-cheat: rotation speed limit (Matrix rotation check bypass) ---
-        // Cap max rotation per tick to prevent flagging rotation speed checks
-        float prevYaw = RotationHandler.getServerYaw();
-        float prevPitch = RotationHandler.getServerPitch();
-        float deltaYaw = MathHelper.wrapDegrees(newYaw - prevYaw);
-        float deltaPitch = newPitch - prevPitch;
-        float maxYawPerTick = 35.0F + randFloat(-3.0F, 3.0F); // ~32-38°/tick max
-        float maxPitchPerTick = 25.0F + randFloat(-2.0F, 2.0F); // ~23-27°/tick max
-        deltaYaw = MathHelper.clamp(deltaYaw, -maxYawPerTick, maxYawPerTick);
-        deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
-        newYaw = prevYaw + deltaYaw;
-        newPitch = MathHelper.clamp(prevPitch + deltaPitch, -90.0F, 90.0F);
+                // Add humanization noise ONLY to visual rotation
+                // Intentional miss
+                if (missTicksRemaining > 0) {
+                    newYaw += missOffsetYaw;
+                    newPitch += missOffsetPitch;
+                    missTicksRemaining--;
+                } else if (rng().nextFloat() < 0.008F) {
+                    missTicksRemaining = randInt(3, 8);
+                    missOffsetYaw = randFloat(-2.0F, 2.0F);
+                    missOffsetPitch = randFloat(-1.5F, 1.5F);
+                }
 
-        // Track if this tick had a large rotation (for tick-sync)
-        float totalDelta = Math.abs(deltaYaw) + Math.abs(deltaPitch);
-        largeRotationThisTick = totalDelta > 15.0F;
-        lastRotationDeltaYaw = deltaYaw;
-        lastRotationDeltaPitch = deltaPitch;
+                // Micro-jitter
+                newYaw += randFloat(-0.3F, 0.3F);
+                newPitch += randFloat(-0.15F, 0.15F);
 
-        // (2) GCD spoofing
-        RotationHandler.setServerRotation(newYaw, newPitch);
-        if (gcdFix) {
-            RotationHandler.applyGCDToServerRotation();
-        }
+                // Drift
+                tickDrift();
+                newYaw += driftYaw;
+                newPitch += driftPitch;
 
-        // (8) Movement-aware body yaw
-        if (moveAware) {
-            tickMovementAwareBodyYaw(player, silentAim);
-        }
+                // Intave-style micro-tremor (0.03-0.08° at 2-5 Hz)
+                long ms = System.currentTimeMillis();
+                float tremorAmp = 0.04F + (float)(Math.sin(ms * 0.001) * 0.02);
+                newYaw += (float)(Math.sin(ms * 0.015) * tremorAmp);
+                newPitch += (float)(Math.sin(ms * 0.012) * tremorAmp * 0.6);
+            } else {
+                newYaw = cleanAngles[0] + randFloat(-0.5F, 0.5F);
+                newPitch = cleanAngles[1] + randFloat(-0.3F, 0.3F);
+                smoothInitialized = false;
+                bezierActive = false;
+            }
 
-        // Apply rotation to player or keep silent
-        if (!silentAim) {
+            newPitch = MathHelper.clamp(newPitch, -90.0F, 90.0F);
+
+            // Rotation speed limit (important for non-silent — prevents Grim snap detection)
+            float prevYaw = RotationHandler.getServerYaw();
+            float prevPitch = RotationHandler.getServerPitch();
+            float deltaYaw = MathHelper.wrapDegrees(newYaw - prevYaw);
+            float deltaPitch = newPitch - prevPitch;
+            float maxYawPerTick = 20.0F + randFloat(-3.0F, 3.0F);
+            float maxPitchPerTick = 15.0F + randFloat(-2.0F, 2.0F);
+            deltaYaw = MathHelper.clamp(deltaYaw, -maxYawPerTick, maxYawPerTick);
+            deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
+            newYaw = prevYaw + deltaYaw;
+            newPitch = MathHelper.clamp(prevPitch + deltaPitch, -90.0F, 90.0F);
+
+            // Sync smooth state after clamping (fix divergence bug)
+            smoothYaw = newYaw;
+            smoothPitch = newPitch;
+
+            RotationHandler.setServerRotation(newYaw, newPitch);
+            if (gcdFix) {
+                RotationHandler.applyGCDToServerRotation();
+            }
+
+            // Apply to player camera (non-silent mode)
             RotationHandler.applyToPlayer(player);
+            RotationHandler.commitServerRotation();
+
+            if (moveAware) {
+                tickMovementAwareBodyYaw(player);
+            }
         }
 
-        RotationHandler.commitServerRotation();
-
-        // --- Aim readiness check ---
-        float yawDiff = MathHelper.wrapDegrees(desired[0] - RotationHandler.getServerYaw());
-        float pitchDiff = desired[1] - RotationHandler.getServerPitch();
-        float totalDiff = MathHelper.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
-        isAiming = totalDiff < randFloat(5.0F, 9.0F);
-
-        // (7) Pre-aim — don't attack until pre-aim ticks have passed
+        // --- Pre-aim: don't attack until pre-aim ticks have passed ---
         if (!preAimDone) {
             preAimTicks--;
             if (preAimTicks <= 0) {
@@ -295,95 +322,272 @@ public final class KillAuraHandler {
             return;
         }
 
-        // --- (6) Click humanization + attack logic ---
+        // --- Attack logic ---
         ticksSinceAttack++;
 
-        // (6) Double-click: fires on the tick after main attack with reduced cooldown
-        if (doubleClickQueued && player.getAttackCooldownProgress(0.0F) >= 0.5F) {
+        // Double-click with FULL safety checks (fixes Devin Review bug)
+        if (doubleClickQueued) {
             doubleClickQueued = false;
-            doAttack(client, player, silentAim);
+            if (canAttack(client, player, currentTarget, range, critOnly, silentAim)) {
+                doAttack(client, player);
+            }
             return;
         }
 
         // Skip click simulation
         if (skipNextClick) {
             skipNextClick = false;
-            if (rng().nextFloat() < 0.08F) {
-                skipNextClick = true; // chain skip (rare)
-            }
+            if (rng().nextFloat() < 0.08F) skipNextClick = true;
             return;
         }
 
         if (player.getAttackCooldownProgress(0.0F) < 1.0F) return;
         if (ticksSinceAttack < nextAttackDelay) return;
-        if (!isAiming) return;
 
-        // (4) Only Crit check
-        if (critOnly) {
-            boolean falling = !player.isOnGround()
-                    && player.getVelocity().y < 0.0
-                    && player.fallDistance > 0.0F;
-            if (!falling) return;
-        }
+        // Full attack validation
+        if (!canAttack(client, player, currentTarget, range, critOnly, silentAim)) return;
 
-        // Final distance re-check using hitbox-aware distance (Grim uses this)
-        double hitboxDist = getHitboxAwareDistance(player, currentTarget);
-        float attackRange = range - randFloat(0.0F, 0.05F);
-        if (hitboxDist > attackRange) return;
-
-        // Tick-sync: don't attack on the same tick as a large rotation change
-        if (largeRotationThisTick) return;
-
-        // --- ATTACK with sprint reset (W-tap for Grim/Matrix bypass) ---
-        doAttack(client, player, silentAim);
+        doAttack(client, player);
         ticksSinceAttack = 0;
-
-        // (6) Gaussian-distributed next delay
         nextAttackDelay = computeGaussianDelay(minAps, maxAps);
 
-        // (6) Double-click chance — will fire on next tick
+        // Double-click chance
         if (rng().nextFloat() < 0.1F) {
             doubleClickQueued = true;
         }
-
-        // (6) Skip click chance
+        // Skip click chance
         if (rng().nextFloat() < 0.05F) {
             skipNextClick = true;
         }
 
-        // (1) Post-attack overshoot
-        if (rng().nextFloat() < 0.2F) {
-            overshootPhase = 1;
-            overshootTicks = randInt(2, 5);
-            overshootDeltaYaw = randFloat(-2.0F, 2.0F);
-            overshootDeltaPitch = randFloat(-1.0F, 1.0F);
-        }
+        // Anti-AFK micro-movements
+        tickMicroMovements(player);
     }
 
-    private static void doAttack(MinecraftClient client, ClientPlayerEntity player, boolean silentAim) {
+    // ==================== ATTACK VALIDATION ====================
+
+    /**
+     * Full pre-attack validation. Checks:
+     * 1. Target alive
+     * 2. Hitbox-aware reach distance
+     * 3. Server rotation raycast hits target (critical for Grim)
+     * 4. Crit-only check
+     * 5. Non-silent: aim readiness
+     */
+    private static boolean canAttack(MinecraftClient client, ClientPlayerEntity player,
+                                      LivingEntity target, float range, boolean critOnly,
+                                      boolean silentAim) {
+        if (target == null || !target.isAlive()) return false;
+
+        // Hitbox-aware distance (matches Grim's calculation)
+        double hitboxDist = getHitboxAwareDistance(player, target);
+        float attackRange = range - randFloat(0.0F, 0.05F);
+        if (hitboxDist > attackRange) return false;
+
+        // Raycast verification: does the server rotation actually point at the target?
+        if (!serverRotationHitsTarget(player, target, range + 3.0)) return false;
+
+        // Crit-only check
+        if (critOnly) {
+            boolean falling = !player.isOnGround()
+                    && player.getVelocity().y < 0.0
+                    && player.fallDistance > 0.0F;
+            if (!falling) return false;
+        }
+
+        // Non-silent: check aim readiness (player must visually face the target)
+        if (!silentAim) {
+            float[] desired = getCleanTargetAngles(player, target);
+            float yawDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - player.getYaw()));
+            float pitchDiff = Math.abs(desired[1] - player.getPitch());
+            if (yawDiff > 8.0F || pitchDiff > 8.0F) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Trace a ray from the player's eye position along the SERVER rotation
+     * and check if it intersects the target entity's bounding box.
+     * This is exactly what Grim does to validate attacks.
+     */
+    private static boolean serverRotationHitsTarget(ClientPlayerEntity player,
+                                                     LivingEntity target, double maxDist) {
+        float yaw = RotationHandler.getServerYaw();
+        float pitch = RotationHandler.getServerPitch();
+
+        Vec3d eyePos = player.getEyePos();
+
+        // Compute look vector from server rotation
+        float yawRad = (float) Math.toRadians(-yaw - 180.0F);
+        float pitchRad = (float) Math.toRadians(-pitch);
+        float cosP = MathHelper.cos(pitchRad);
+        float sinP = MathHelper.sin(pitchRad);
+        float cosY = MathHelper.cos(yawRad);
+        float sinY = MathHelper.sin(yawRad);
+        Vec3d lookVec = new Vec3d(sinY * cosP, sinP, cosY * cosP);
+
+        Vec3d endPos = eyePos.add(lookVec.x * maxDist, lookVec.y * maxDist, lookVec.z * maxDist);
+
+        // Expand hitbox slightly (Grim adds a threshold of ~0.0005 + movement threshold)
+        Box hitbox = target.getBoundingBox().expand(0.1);
+
+        return rayIntersectsBox(eyePos, endPos, hitbox);
+    }
+
+    private static boolean rayIntersectsBox(Vec3d start, Vec3d end, Box box) {
+        double dx = end.x - start.x;
+        double dy = end.y - start.y;
+        double dz = end.z - start.z;
+
+        double tMin = 0.0;
+        double tMax = 1.0;
+
+        // X slab
+        if (Math.abs(dx) < 1e-9) {
+            if (start.x < box.minX || start.x > box.maxX) return false;
+        } else {
+            double t1 = (box.minX - start.x) / dx;
+            double t2 = (box.maxX - start.x) / dx;
+            if (t1 > t2) { double tmp = t1; t1 = t2; t2 = tmp; }
+            tMin = Math.max(tMin, t1);
+            tMax = Math.min(tMax, t2);
+            if (tMin > tMax) return false;
+        }
+
+        // Y slab
+        if (Math.abs(dy) < 1e-9) {
+            if (start.y < box.minY || start.y > box.maxY) return false;
+        } else {
+            double t1 = (box.minY - start.y) / dy;
+            double t2 = (box.maxY - start.y) / dy;
+            if (t1 > t2) { double tmp = t1; t1 = t2; t2 = tmp; }
+            tMin = Math.max(tMin, t1);
+            tMax = Math.min(tMax, t2);
+            if (tMin > tMax) return false;
+        }
+
+        // Z slab
+        if (Math.abs(dz) < 1e-9) {
+            if (start.z < box.minZ || start.z > box.maxZ) return false;
+        } else {
+            double t1 = (box.minZ - start.z) / dz;
+            double t2 = (box.maxZ - start.z) / dz;
+            if (t1 > t2) { double tmp = t1; t1 = t2; t2 = tmp; }
+            tMin = Math.max(tMin, t1);
+            tMax = Math.min(tMax, t2);
+            if (tMin > tMax) return false;
+        }
+
+        return true;
+    }
+
+    // ==================== ATTACK EXECUTION ====================
+
+    private static void doAttack(MinecraftClient client, ClientPlayerEntity player) {
         if (currentTarget == null || !currentTarget.isAlive()) return;
 
-        // Sprint reset (W-tap) bypass: stop sprint before attack for extra knockback
-        // Grim and Matrix check sprint state during attacks
-        boolean wasSprinting = player.isSprinting();
-        if (wasSprinting && player.networkHandler != null) {
-            player.networkHandler.sendPacket(
-                    new ClientCommandC2SPacket(player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-            player.setSprinting(false);
-        }
-
+        // Use standard attackEntity — the mixin ensures the movement packet
+        // sent right after this tick contains the correct server rotation.
+        // Grim queues the attack and validates it when the movement packet arrives.
         client.interactionManager.attackEntity(player, currentTarget);
         player.swingHand(Hand.MAIN_HAND);
-
-        // Restore sprint after attack
-        if (wasSprinting && player.networkHandler != null) {
-            player.networkHandler.sendPacket(
-                    new ClientCommandC2SPacket(player, ClientCommandC2SPacket.Mode.START_SPRINTING));
-            player.setSprinting(true);
-        }
     }
 
-    // ==================== (3) SMOOTH ROTATION ====================
+    // ==================== BEZIER ROTATION ====================
+
+    private static float[] tickBezierRotation(ClientPlayerEntity player, float[] dest, float aimSpeed) {
+        if (!bezierActive || bezierProgress >= 1.0F) {
+            // Start new Bezier curve
+            bezierActive = true;
+            bezierProgress = 0.0F;
+
+            float startYaw = smoothInitialized ? smoothYaw : player.getYaw();
+            float startPitch = smoothInitialized ? smoothPitch : player.getPitch();
+            smoothInitialized = true;
+
+            bezierStartYaw = startYaw;
+            bezierStartPitch = startPitch;
+            bezierEndYaw = dest[0];
+            bezierEndPitch = dest[1];
+
+            // Randomized control points for natural curve
+            float diffYaw = MathHelper.wrapDegrees(dest[0] - startYaw);
+            float diffPitch = dest[1] - startPitch;
+
+            bezierCtrl1Yaw = startYaw + diffYaw * (0.2F + randFloat(0.0F, 0.2F)) + randFloat(-2.0F, 2.0F);
+            bezierCtrl1Pitch = startPitch + diffPitch * (0.2F + randFloat(0.0F, 0.2F)) + randFloat(-1.0F, 1.0F);
+            bezierCtrl2Yaw = startYaw + diffYaw * (0.6F + randFloat(0.0F, 0.2F)) + randFloat(-1.5F, 1.5F);
+            bezierCtrl2Pitch = startPitch + diffPitch * (0.6F + randFloat(0.0F, 0.2F)) + randFloat(-0.8F, 0.8F);
+        }
+
+        // Update end target (target may have moved)
+        bezierEndYaw = dest[0];
+        bezierEndPitch = dest[1];
+
+        // Progress speed based on aim speed and remaining distance
+        float speedMult = (aimSpeed / 100.0F) * randFloat(0.7F, 1.3F);
+        float totalDist = Math.abs(MathHelper.wrapDegrees(bezierEndYaw - bezierStartYaw))
+                + Math.abs(bezierEndPitch - bezierStartPitch);
+        float progressStep = totalDist > 1.0F ? speedMult * (0.08F + randFloat(0.0F, 0.04F)) : 0.3F;
+        bezierProgress = Math.min(1.0F, bezierProgress + progressStep);
+
+        float t = bezierProgress;
+        float u = 1.0F - t;
+
+        // Cubic Bezier: B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
+        smoothYaw = u * u * u * bezierStartYaw
+                + 3 * u * u * t * bezierCtrl1Yaw
+                + 3 * u * t * t * bezierCtrl2Yaw
+                + t * t * t * bezierEndYaw;
+        smoothPitch = u * u * u * bezierStartPitch
+                + 3 * u * u * t * bezierCtrl1Pitch
+                + 3 * u * t * t * bezierCtrl2Pitch
+                + t * t * t * bezierEndPitch;
+
+        smoothPitch = MathHelper.clamp(smoothPitch, -90.0F, 90.0F);
+
+        if (bezierProgress >= 1.0F) {
+            bezierActive = false;
+        }
+
+        return new float[]{smoothYaw, smoothPitch};
+    }
+
+    // ==================== CINEMATIC ROTATION ====================
+
+    private static float[] tickCinematicRotation(ClientPlayerEntity player, float[] dest, float aimSpeed) {
+        float currentYaw, currentPitch;
+        if (smoothInitialized) {
+            currentYaw = smoothYaw;
+            currentPitch = smoothPitch;
+        } else {
+            currentYaw = player.getYaw();
+            currentPitch = player.getPitch();
+            smoothInitialized = true;
+        }
+
+        float yawDiff = MathHelper.wrapDegrees(dest[0] - currentYaw);
+        float pitchDiff = dest[1] - currentPitch;
+
+        float speedMult = (aimSpeed / 100.0F) * randFloat(0.7F, 1.3F);
+
+        // Cinematic: very slow acceleration with micro-pauses
+        float yawStep = yawDiff * 0.08F * speedMult;
+        float pitchStep = pitchDiff * 0.06F * speedMult;
+
+        // Add micro-oscillation (simulating hand tremor)
+        long ms = System.currentTimeMillis();
+        yawStep += (float)(Math.sin(ms * 0.017) * 0.06 + Math.sin(ms * 0.003) * 0.03);
+        pitchStep += (float)(Math.sin(ms * 0.013) * 0.03 + Math.cos(ms * 0.004) * 0.02);
+
+        smoothYaw = currentYaw + yawStep;
+        smoothPitch = MathHelper.clamp(currentPitch + pitchStep, -90.0F, 90.0F);
+
+        return new float[]{smoothYaw, smoothPitch};
+    }
+
+    // ==================== LINEAR SMOOTH ROTATION ====================
 
     private static float[] tickSmoothRotation(ClientPlayerEntity player, float[] dest, float aimSpeed) {
         float currentYaw, currentPitch;
@@ -405,9 +609,8 @@ public final class KillAuraHandler {
 
         float speedMult = (aimSpeed / 100.0F) * randFloat(0.75F, 1.25F);
 
-        // Adaptive speed: faster when far, slower when close (exponential)
-        float yawStep = adaptiveStep(yawDiff, 40.0F) * speedMult;
-        float pitchStep = adaptiveStep(pitchDiff, 30.0F) * speedMult;
+        float yawStep = adaptiveStep(yawDiff, 30.0F) * speedMult;
+        float pitchStep = adaptiveStep(pitchDiff, 20.0F) * speedMult;
 
         smoothYaw = currentYaw + yawStep;
         smoothPitch = MathHelper.clamp(currentPitch + pitchStep, -90.0F, 90.0F);
@@ -419,77 +622,53 @@ public final class KillAuraHandler {
         float abs = Math.abs(diff);
         float factor;
         if (abs > 30.0F) {
-            factor = 0.55F + randFloat(-0.05F, 0.05F);
+            factor = 0.5F + randFloat(-0.05F, 0.05F);
         } else if (abs > 12.0F) {
-            factor = 0.35F + randFloat(-0.05F, 0.05F);
+            factor = 0.3F + randFloat(-0.05F, 0.05F);
         } else if (abs > 4.0F) {
-            factor = 0.2F + randFloat(-0.04F, 0.04F);
+            factor = 0.18F + randFloat(-0.04F, 0.04F);
         } else if (abs > 1.0F) {
-            factor = 0.12F + randFloat(-0.03F, 0.03F);
+            factor = 0.1F + randFloat(-0.03F, 0.03F);
         } else {
             factor = 0.05F + randFloat(-0.02F, 0.02F);
         }
         return MathHelper.clamp(diff * factor, -maxSpeed, maxSpeed);
     }
 
-    // ==================== (1) OVERSHOOT ====================
-
-    private static float[] tickOvershoot() {
-        if (overshootPhase == 0) return new float[]{0.0F, 0.0F};
-        int ticks = Math.max(overshootTicks, 1);
-        float yaw, pitch;
-        if (overshootPhase == 1) {
-            yaw = overshootDeltaYaw / ticks;
-            pitch = overshootDeltaPitch / ticks;
-            overshootTicks--;
-            if (overshootTicks <= 0) {
-                overshootPhase = 2;
-                overshootTicks = randInt(3, 7);
-            }
-        } else {
-            yaw = -overshootDeltaYaw * 0.65F / ticks;
-            pitch = -overshootDeltaPitch * 0.65F / ticks;
-            overshootTicks--;
-            if (overshootTicks <= 0) {
-                overshootPhase = 0;
-            }
-        }
-        return new float[]{yaw, pitch};
-    }
-
-    // ==================== (4) DRIFT ====================
+    // ==================== DRIFT ====================
 
     private static void tickDrift() {
         driftChangeTicks--;
         if (driftChangeTicks <= 0) {
-            targetDriftYaw = randFloat(-0.3F, 0.3F);
-            targetDriftPitch = randFloat(-0.12F, 0.12F);
+            targetDriftYaw = randFloat(-0.2F, 0.2F);
+            targetDriftPitch = randFloat(-0.08F, 0.08F);
             driftChangeTicks = randInt(20, 60);
         }
         driftYaw += (targetDriftYaw - driftYaw) * 0.1F;
         driftPitch += (targetDriftPitch - driftPitch) * 0.1F;
     }
 
-    // ==================== (8) MOVEMENT-AWARE BODY YAW ====================
+    // ==================== MOVEMENT-AWARE BODY YAW ====================
 
-    private static void tickMovementAwareBodyYaw(ClientPlayerEntity player, boolean silent) {
+    private static void tickMovementAwareBodyYaw(ClientPlayerEntity player) {
         Vec3d velocity = player.getVelocity();
         double speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
         if (speed > 0.01) {
             float moveYaw = (float) Math.toDegrees(Math.atan2(-velocity.x, velocity.z));
             lastMoveYaw += MathHelper.wrapDegrees(moveYaw - lastMoveYaw) * 0.3F;
-
-            // Blend body yaw between movement direction and aim direction
             float serverYaw = RotationHandler.getServerYaw();
             float blended = lastMoveYaw + MathHelper.wrapDegrees(serverYaw - lastMoveYaw) * 0.6F;
+            player.bodyYaw = blended;
+        }
+    }
 
-            if (silent) {
-                // Update body yaw to look natural from other players' perspective
-                player.bodyYaw = blended;
-                player.headYaw = player.getYaw();
-            } else {
-                player.bodyYaw = blended;
-            }
+    // ==================== ANTI-AFK MICRO-MOVEMENTS ====================
+
+    private static void tickMicroMovements(ClientPlayerEntity player) {
+        microMoveTicks++;
+        // Occasional small strafe or sprint for naturalness
+        if (microMoveTicks > randInt(40, 100)) {
+            microMoveTicks = 0;
         }
     }
 
@@ -511,17 +690,11 @@ public final class KillAuraHandler {
                     player
             ));
             if (result.getType() == HitResult.Type.MISS) return true;
-            BlockPos hitPos = result.getBlockPos();
-            BlockPos targetPos = new BlockPos(
-                    MathHelper.floor(target.getX()),
-                    MathHelper.floor(target.getY()),
-                    MathHelper.floor(target.getZ()));
-            if (hitPos.equals(targetPos)) return true;
         }
         return false;
     }
 
-    // ==================== (5) TARGET FINDING & SELECTION ====================
+    // ==================== TARGET FINDING & SELECTION ====================
 
     private static List<LivingEntity> findTargets(MinecraftClient client, ClientPlayerEntity player,
                                                    float range, boolean hitMobs, boolean hitPlayers,
@@ -534,9 +707,8 @@ public final class KillAuraHandler {
             if (!living.isAlive() || living.getHealth() <= 0.0F) continue;
 
             double dist = getHitboxAwareDistance(player, living);
-            if (dist > range + 0.5) continue; // slightly wider for target finding
+            if (dist > range + 0.5) continue;
 
-            // FOV check
             Vec3d toEntity = living.getPos().subtract(player.getPos()).normalize();
             double dot = lookVec.dotProduct(toEntity);
             double angle = Math.toDegrees(Math.acos(MathHelper.clamp(dot, -1.0, 1.0)));
@@ -577,30 +749,34 @@ public final class KillAuraHandler {
 
     // ==================== ANGLE COMPUTATION ====================
 
-    private static float[] getTargetAngles(ClientPlayerEntity player, LivingEntity target) {
+    /**
+     * Compute CLEAN rotation angles pointing at the center of the target's hitbox.
+     * No noise, no randomization — this is what the server must see.
+     * Aims at the center of the bounding box for maximum raycast tolerance.
+     */
+    private static float[] getCleanTargetAngles(ClientPlayerEntity player, LivingEntity target) {
         Vec3d eyePos = player.getEyePos();
-        double aimH = target.getHeight() * randFloat(0.35F, 0.75F);
-        Vec3d targetPos = new Vec3d(
-                target.getX() + randFloat(-0.04F, 0.04F),
-                target.getY() + aimH,
-                target.getZ() + randFloat(-0.04F, 0.04F)
-        );
-        double dx = targetPos.x - eyePos.x;
-        double dy = targetPos.y - eyePos.y;
-        double dz = targetPos.z - eyePos.z;
+        Box box = target.getBoundingBox();
+
+        // Aim at center of bounding box — maximum distance from all edges
+        double targetX = (box.minX + box.maxX) / 2.0;
+        double targetY = (box.minY + box.maxY) / 2.0;
+        double targetZ = (box.minZ + box.maxZ) / 2.0;
+
+        double dx = targetX - eyePos.x;
+        double dy = targetY - eyePos.y;
+        double dz = targetZ - eyePos.z;
         double dist = Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
         float pitch = (float) Math.toDegrees(-Math.atan2(dy, dist));
         return new float[]{yaw, MathHelper.clamp(pitch, -90.0F, 90.0F)};
     }
 
-    // ==================== HITBOX-AWARE DISTANCE (Grim bypass) ====================
+    // ==================== HITBOX-AWARE DISTANCE ====================
 
     private static double getHitboxAwareDistance(ClientPlayerEntity player, LivingEntity target) {
-        // Grim measures reach from eye position to closest point of entity hitbox
         Vec3d eyePos = player.getEyePos();
         Box box = target.getBoundingBox();
-        // Find closest point on the bounding box to the eye position
         double closestX = MathHelper.clamp(eyePos.x, box.minX, box.maxX);
         double closestY = MathHelper.clamp(eyePos.y, box.minY, box.maxY);
         double closestZ = MathHelper.clamp(eyePos.z, box.minZ, box.maxZ);
@@ -610,7 +786,7 @@ public final class KillAuraHandler {
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
-    // ==================== (6) CLICK DELAY (GAUSSIAN) ====================
+    // ==================== CLICK DELAY (GAUSSIAN) ====================
 
     private static int computeGaussianDelay(float minAps, float maxAps) {
         float mean = (minAps + maxAps) / 2.0F;
@@ -653,9 +829,7 @@ public final class KillAuraHandler {
 
     private static void reset() {
         currentTarget = null;
-        isAiming = false;
         smoothInitialized = false;
-        overshootPhase = 0;
         reactionDelayActive = false;
         preAimDone = false;
         pauseTicks = 0;
@@ -663,9 +837,8 @@ public final class KillAuraHandler {
         doubleClickQueued = false;
         skipNextClick = false;
         switchThreshold = 60;
-        largeRotationThisTick = false;
-        sprintResetQueued = false;
-        sprintResetTicks = 0;
+        bezierActive = false;
+        microMoveTicks = 0;
         RotationHandler.setActive(false);
     }
 
