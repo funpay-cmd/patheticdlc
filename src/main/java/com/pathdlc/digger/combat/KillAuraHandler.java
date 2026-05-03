@@ -200,8 +200,9 @@ public final class KillAuraHandler {
         float newPitch = smoothed[1];
 
         // (1) Overshoot simulation
-        newYaw += tickOvershoot(0);
-        newPitch += tickOvershoot(1);
+        float[] overshootDeltas = tickOvershoot();
+        newYaw += overshootDeltas[0];
+        newPitch += overshootDeltas[1];
 
         // (4) Micro-jitter
         newYaw += randFloat(-0.4F, 0.4F);
@@ -255,6 +256,13 @@ public final class KillAuraHandler {
         // --- (6) Click humanization + attack logic ---
         ticksSinceAttack++;
 
+        // (6) Double-click: fires on the tick after main attack with reduced cooldown
+        if (doubleClickQueued && player.getAttackCooldownProgress(0.0F) >= 0.5F) {
+            doubleClickQueued = false;
+            doAttack(client, player, silentAim);
+            return;
+        }
+
         // Skip click simulation
         if (skipNextClick) {
             skipNextClick = false;
@@ -281,29 +289,13 @@ public final class KillAuraHandler {
         if (player.distanceTo(currentTarget) > attackRange) return;
 
         // --- ATTACK ---
-        // For silent aim: temporarily apply server rotation for the attack packet
-        if (silentAim) {
-            float savedYaw = player.getYaw();
-            float savedPitch = player.getPitch();
-            player.setYaw(RotationHandler.getServerYaw());
-            player.setPitch(RotationHandler.getServerPitch());
-
-            client.interactionManager.attackEntity(player, currentTarget);
-            player.swingHand(Hand.MAIN_HAND);
-
-            player.setYaw(savedYaw);
-            player.setPitch(savedPitch);
-        } else {
-            client.interactionManager.attackEntity(player, currentTarget);
-            player.swingHand(Hand.MAIN_HAND);
-        }
-
+        doAttack(client, player, silentAim);
         ticksSinceAttack = 0;
 
         // (6) Gaussian-distributed next delay
         nextAttackDelay = computeGaussianDelay(minAps, maxAps);
 
-        // (6) Double-click chance
+        // (6) Double-click chance — will fire on next tick
         if (rng().nextFloat() < 0.1F) {
             doubleClickQueued = true;
         }
@@ -320,22 +312,21 @@ public final class KillAuraHandler {
             overshootDeltaYaw = randFloat(-2.0F, 2.0F);
             overshootDeltaPitch = randFloat(-1.0F, 1.0F);
         }
+    }
 
-        // (6) Execute double-click on next tick
-        if (doubleClickQueued && player.getAttackCooldownProgress(0.0F) >= 0.8F) {
-            doubleClickQueued = false;
-            // Attack again immediately (simulates double-click)
-            if (silentAim) {
-                float savedYaw = player.getYaw();
-                float savedPitch = player.getPitch();
-                player.setYaw(RotationHandler.getServerYaw());
-                player.setPitch(RotationHandler.getServerPitch());
-                client.interactionManager.attackEntity(player, currentTarget);
-                player.setYaw(savedYaw);
-                player.setPitch(savedPitch);
-            } else {
-                client.interactionManager.attackEntity(player, currentTarget);
-            }
+    private static void doAttack(MinecraftClient client, ClientPlayerEntity player, boolean silentAim) {
+        if (silentAim) {
+            float savedYaw = player.getYaw();
+            float savedPitch = player.getPitch();
+            player.setYaw(RotationHandler.getServerYaw());
+            player.setPitch(RotationHandler.getServerPitch());
+            client.interactionManager.attackEntity(player, currentTarget);
+            player.swingHand(Hand.MAIN_HAND);
+            player.setYaw(savedYaw);
+            player.setPitch(savedPitch);
+        } else {
+            client.interactionManager.attackEntity(player, currentTarget);
+            player.swingHand(Hand.MAIN_HAND);
         }
     }
 
@@ -390,26 +381,27 @@ public final class KillAuraHandler {
 
     // ==================== (1) OVERSHOOT ====================
 
-    private static float tickOvershoot(int axis) {
-        if (overshootPhase == 0) return 0.0F;
-        float delta = axis == 0 ? overshootDeltaYaw : overshootDeltaPitch;
+    private static float[] tickOvershoot() {
+        if (overshootPhase == 0) return new float[]{0.0F, 0.0F};
+        int ticks = Math.max(overshootTicks, 1);
+        float yaw, pitch;
         if (overshootPhase == 1) {
-            float result = delta / Math.max(overshootTicks, 1);
+            yaw = overshootDeltaYaw / ticks;
+            pitch = overshootDeltaPitch / ticks;
             overshootTicks--;
             if (overshootTicks <= 0) {
                 overshootPhase = 2;
                 overshootTicks = randInt(3, 7);
             }
-            return result;
-        } else if (overshootPhase == 2) {
-            float result = -delta * 0.65F / Math.max(overshootTicks, 1);
+        } else {
+            yaw = -overshootDeltaYaw * 0.65F / ticks;
+            pitch = -overshootDeltaPitch * 0.65F / ticks;
             overshootTicks--;
             if (overshootTicks <= 0) {
                 overshootPhase = 0;
             }
-            return result;
         }
-        return 0.0F;
+        return new float[]{yaw, pitch};
     }
 
     // ==================== (4) DRIFT ====================
