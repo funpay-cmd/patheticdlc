@@ -73,7 +73,7 @@ public class ClickGuiScreen extends Screen {
    ) {
       if (this.categories.isEmpty()) {
          Module killAura = new Module("KillAura");
-         killAura.addSetting(ModuleSetting.slider("Range", 3.2F, 2.8F, 3.5F, 0.05F));
+         killAura.addSetting(ModuleSetting.slider("Range", 3.0F, 2.5F, 3.05F, 0.05F));
          killAura.addSetting(ModuleSetting.slider("Aim Speed", 55.0F, 20.0F, 100.0F, 5.0F));
          killAura.addSetting(ModuleSetting.slider("Min APS", 8.0F, 5.0F, 15.0F, 0.5F));
          killAura.addSetting(ModuleSetting.slider("Max APS", 12.0F, 8.0F, 18.0F, 0.5F));

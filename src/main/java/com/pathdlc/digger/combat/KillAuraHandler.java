@@ -14,10 +14,12 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
@@ -81,6 +83,15 @@ public final class KillAuraHandler {
 
     // --- Target switch threshold (generated once per switch cycle) ---
     private static int switchThreshold = 60;
+
+    // --- Anti-cheat bypass: rotation speed tracking ---
+    private static float lastRotationDeltaYaw;
+    private static float lastRotationDeltaPitch;
+    private static boolean largeRotationThisTick;
+
+    // --- Sprint reset state ---
+    private static boolean sprintResetQueued;
+    private static int sprintResetTicks;
 
     public static void tick(MinecraftClient client) {
         if (!ModuleManager.isEnabled("KillAura")) {
@@ -232,6 +243,25 @@ public final class KillAuraHandler {
 
         newPitch = MathHelper.clamp(newPitch, -90.0F, 90.0F);
 
+        // --- Anti-cheat: rotation speed limit (Matrix rotation check bypass) ---
+        // Cap max rotation per tick to prevent flagging rotation speed checks
+        float prevYaw = RotationHandler.getServerYaw();
+        float prevPitch = RotationHandler.getServerPitch();
+        float deltaYaw = MathHelper.wrapDegrees(newYaw - prevYaw);
+        float deltaPitch = newPitch - prevPitch;
+        float maxYawPerTick = 35.0F + randFloat(-3.0F, 3.0F); // ~32-38°/tick max
+        float maxPitchPerTick = 25.0F + randFloat(-2.0F, 2.0F); // ~23-27°/tick max
+        deltaYaw = MathHelper.clamp(deltaYaw, -maxYawPerTick, maxYawPerTick);
+        deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
+        newYaw = prevYaw + deltaYaw;
+        newPitch = MathHelper.clamp(prevPitch + deltaPitch, -90.0F, 90.0F);
+
+        // Track if this tick had a large rotation (for tick-sync)
+        float totalDelta = Math.abs(deltaYaw) + Math.abs(deltaPitch);
+        largeRotationThisTick = totalDelta > 15.0F;
+        lastRotationDeltaYaw = deltaYaw;
+        lastRotationDeltaPitch = deltaPitch;
+
         // (2) GCD spoofing
         RotationHandler.setServerRotation(newYaw, newPitch);
         if (gcdFix) {
@@ -296,11 +326,15 @@ public final class KillAuraHandler {
             if (!falling) return;
         }
 
-        // Final distance re-check
-        float attackRange = range - randFloat(0.0F, 0.15F);
-        if (player.distanceTo(currentTarget) > attackRange) return;
+        // Final distance re-check using hitbox-aware distance (Grim uses this)
+        double hitboxDist = getHitboxAwareDistance(player, currentTarget);
+        float attackRange = range - randFloat(0.0F, 0.05F);
+        if (hitboxDist > attackRange) return;
 
-        // --- ATTACK ---
+        // Tick-sync: don't attack on the same tick as a large rotation change
+        if (largeRotationThisTick) return;
+
+        // --- ATTACK with sprint reset (W-tap for Grim/Matrix bypass) ---
         doAttack(client, player, silentAim);
         ticksSinceAttack = 0;
 
@@ -328,8 +362,25 @@ public final class KillAuraHandler {
 
     private static void doAttack(MinecraftClient client, ClientPlayerEntity player, boolean silentAim) {
         if (currentTarget == null || !currentTarget.isAlive()) return;
+
+        // Sprint reset (W-tap) bypass: stop sprint before attack for extra knockback
+        // Grim and Matrix check sprint state during attacks
+        boolean wasSprinting = player.isSprinting();
+        if (wasSprinting && player.networkHandler != null) {
+            player.networkHandler.sendPacket(
+                    new ClientCommandC2SPacket(player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+            player.setSprinting(false);
+        }
+
         client.interactionManager.attackEntity(player, currentTarget);
         player.swingHand(Hand.MAIN_HAND);
+
+        // Restore sprint after attack
+        if (wasSprinting && player.networkHandler != null) {
+            player.networkHandler.sendPacket(
+                    new ClientCommandC2SPacket(player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+            player.setSprinting(true);
+        }
     }
 
     // ==================== (3) SMOOTH ROTATION ====================
@@ -482,8 +533,8 @@ public final class KillAuraHandler {
             if (entity == player || !(entity instanceof LivingEntity living)) continue;
             if (!living.isAlive() || living.getHealth() <= 0.0F) continue;
 
-            double dist = player.distanceTo(living);
-            if (dist > range) continue;
+            double dist = getHitboxAwareDistance(player, living);
+            if (dist > range + 0.5) continue; // slightly wider for target finding
 
             // FOV check
             Vec3d toEntity = living.getPos().subtract(player.getPos()).normalize();
@@ -543,6 +594,22 @@ public final class KillAuraHandler {
         return new float[]{yaw, MathHelper.clamp(pitch, -90.0F, 90.0F)};
     }
 
+    // ==================== HITBOX-AWARE DISTANCE (Grim bypass) ====================
+
+    private static double getHitboxAwareDistance(ClientPlayerEntity player, LivingEntity target) {
+        // Grim measures reach from eye position to closest point of entity hitbox
+        Vec3d eyePos = player.getEyePos();
+        Box box = target.getBoundingBox();
+        // Find closest point on the bounding box to the eye position
+        double closestX = MathHelper.clamp(eyePos.x, box.minX, box.maxX);
+        double closestY = MathHelper.clamp(eyePos.y, box.minY, box.maxY);
+        double closestZ = MathHelper.clamp(eyePos.z, box.minZ, box.maxZ);
+        double dx = eyePos.x - closestX;
+        double dy = eyePos.y - closestY;
+        double dz = eyePos.z - closestZ;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
     // ==================== (6) CLICK DELAY (GAUSSIAN) ====================
 
     private static int computeGaussianDelay(float minAps, float maxAps) {
@@ -596,6 +663,9 @@ public final class KillAuraHandler {
         doubleClickQueued = false;
         skipNextClick = false;
         switchThreshold = 60;
+        largeRotationThisTick = false;
+        sprintResetQueued = false;
+        sprintResetTicks = 0;
         RotationHandler.setActive(false);
     }
 
