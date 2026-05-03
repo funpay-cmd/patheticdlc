@@ -22,38 +22,62 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
+/**
+ * Advanced KillAura with 8 anti-cheat bypass techniques:
+ *
+ * 1. Silent Aim — server-side only rotation via packet interception
+ * 2. GCD Spoofing — deltas rounded to sensitivity-based GCD
+ * 3. Smooth / Interpolated rotations with overshoot
+ * 4. Humanization — jitter, intentional misses, reaction time
+ * 5. Weighted hit selection (dist / FOV / HP / time)
+ * 6. Click humanization — Gaussian CPS, double-clicks, skips
+ * 7. Pre-aim — rotate toward target 1-3 ticks before attack
+ * 8. Movement-aware — body yaw synced with movement direction
+ */
 public final class KillAuraHandler {
 
+    // --- Target state ---
     private static LivingEntity currentTarget;
     private static int switchTimer;
-    private static int nextAttackDelay;
     private static int ticksSinceAttack;
     private static boolean isAiming;
 
-    // Bezier curve rotation state
-    private static float bezierProgress;
-    private static float bezierYawStart, bezierYawEnd;
-    private static float bezierPitchStart, bezierPitchEnd;
-    private static float bezierCtrlYaw1, bezierCtrlPitch1;
-    private static float bezierCtrlYaw2, bezierCtrlPitch2;
-    private static float bezierSpeed;
-    private static boolean bezierActive;
+    // --- Reaction time ---
+    private static long targetAcquiredMs;
+    private static boolean reactionDelayActive;
 
-    // Human micro-correction state
-    private static float overshootYaw, overshootPitch;
-    private static int correctionTicks;
-    private static int correctionPhase; // 0=idle, 1=overshoot, 2=correct-back
+    // --- Smooth rotation state ---
+    private static float smoothYaw, smoothPitch;
+    private static boolean smoothInitialized;
 
-    // Fatigue / drift simulation
-    private static float driftYaw, driftPitch;
-    private static int driftChangeTicks;
-    private static float targetDriftYaw, targetDriftPitch;
+    // --- Overshoot state ---
+    private static int overshootPhase; // 0=none, 1=overshoot, 2=correct
+    private static int overshootTicks;
+    private static float overshootDeltaYaw, overshootDeltaPitch;
 
-    // Pause simulation
+    // --- Pre-aim state ---
+    private static int preAimTicks;
+    private static boolean preAimDone;
+
+    // --- Click humanization ---
+    private static int nextAttackDelay;
+    private static boolean skipNextClick;
+    private static boolean doubleClickQueued;
+
+    // --- Micro-pause (fatigue) ---
     private static int pauseTicks;
 
-    // Last attack tracking for dynamic delay
-    private static long lastAttackTimeMs;
+    // --- Intentional miss ---
+    private static int missTicksRemaining;
+    private static float missOffsetYaw, missOffsetPitch;
+
+    // --- Drift simulation ---
+    private static float driftYaw, driftPitch;
+    private static float targetDriftYaw, targetDriftPitch;
+    private static int driftChangeTicks;
+
+    // --- Movement-aware body yaw ---
+    private static float lastMoveYaw;
 
     public static void tick(MinecraftClient client) {
         if (!ModuleManager.isEnabled("KillAura")) {
@@ -69,73 +93,182 @@ public final class KillAuraHandler {
         Module mod = ModuleManager.get("KillAura");
         if (mod == null) return;
 
-        float range = getSetting(mod, "Range", 3.2F);
-        boolean critOnly = getToggle(mod, "Only Crit");
-        boolean hitMobs = getToggle(mod, "Attack Mobs");
-        boolean hitPlayers = getToggle(mod, "Attack Players");
-        float aimSpeed = getSetting(mod, "Aim Speed", 55.0F);
-        float minAps = getSetting(mod, "Min APS", 8.0F);
-        float maxAps = getSetting(mod, "Max APS", 12.0F);
-        float fov = getSetting(mod, "FOV", 120.0F);
-        boolean losCheck = getToggle(mod, "LoS Check");
+        // --- Read settings ---
+        float range = getFloat(mod, "Range", 3.2F);
+        float aimSpeed = getFloat(mod, "Aim Speed", 55.0F);
+        float minAps = getFloat(mod, "Min APS", 8.0F);
+        float maxAps = getFloat(mod, "Max APS", 12.0F);
+        float fov = getFloat(mod, "FOV", 120.0F);
+        float reactionMs = getFloat(mod, "Reaction ms", 180.0F);
+        float sensitivity = getFloat(mod, "GCD Sens", 0.5F);
+        boolean silentAim = getBool(mod, "Silent Aim");
+        boolean gcdFix = getBool(mod, "GCD Fix");
+        boolean smartAim = getBool(mod, "Smart Aim");
+        boolean losCheck = getBool(mod, "LoS Check");
+        boolean critOnly = getBool(mod, "Only Crit");
+        boolean hitMobs = getBool(mod, "Attack Mobs");
+        boolean hitPlayers = getBool(mod, "Attack Players");
+        boolean moveAware = getBool(mod, "Move Aware");
         String targetMode = getChoice(mod, "Target Mode");
-        boolean smartAim = getToggle(mod, "Smart Aim");
 
-        // Random micro-pause (human fatigue)
-        if (pauseTicks > 0) {
-            pauseTicks--;
-            return;
-        }
-        if (ThreadLocalRandom.current().nextFloat() < 0.003F) {
-            pauseTicks = ThreadLocalRandom.current().nextInt(2, 6);
-            return;
+        // --- GCD setup ---
+        if (gcdFix) {
+            RotationHandler.updateGCD(sensitivity);
+        } else {
+            RotationHandler.updateGCD(0.0F);
         }
 
+        // --- Silent Aim toggle ---
+        RotationHandler.setActive(silentAim);
+
+        // --- Fatigue micro-pause ---
+        if (pauseTicks > 0) { pauseTicks--; return; }
+        if (rng().nextFloat() < 0.003F) {
+            pauseTicks = randInt(2, 6);
+            return;
+        }
+
+        // --- Find & filter targets ---
         List<LivingEntity> targets = findTargets(client, player, range, hitMobs, hitPlayers, fov);
-
-        // Filter by line-of-sight
         if (losCheck) {
             targets.removeIf(e -> !hasLineOfSight(client, player, e));
         }
-
         if (targets.isEmpty()) {
-            currentTarget = null;
+            if (currentTarget != null) {
+                currentTarget = null;
+                reactionDelayActive = false;
+                preAimDone = false;
+            }
             isAiming = false;
-            bezierActive = false;
+            RotationHandler.setActive(false);
             return;
         }
 
+        // (5) Weighted hit selection
         sortTargets(targets, player, targetMode);
 
+        // --- Target switching ---
         switchTimer++;
         boolean needSwitch = currentTarget == null
                 || !currentTarget.isAlive()
                 || player.distanceTo(currentTarget) > range + 0.5F
                 || !targets.contains(currentTarget)
-                || switchTimer > randomInt(40, 80);
+                || switchTimer > randInt(40, 80);
 
         if (needSwitch) {
-            LivingEntity newTarget = targets.get(0);
-            if (newTarget != currentTarget) {
-                currentTarget = newTarget;
-                switchTimer = 0;
-                initBezierCurve(player, currentTarget, aimSpeed);
+            LivingEntity prev = currentTarget;
+            currentTarget = targets.get(0);
+            switchTimer = 0;
+            if (prev != currentTarget) {
+                // (4) Reaction time on new target
+                targetAcquiredMs = System.currentTimeMillis();
+                reactionDelayActive = true;
+                preAimDone = false;
+                preAimTicks = randInt(1, 3);
+                smoothInitialized = false;
+                overshootPhase = 0;
             }
         }
 
-        // Perform rotation
-        if (smartAim) {
-            tickHumanRotation(player, currentTarget, aimSpeed);
-        } else {
-            tickSimpleRotation(player, currentTarget, aimSpeed);
+        // (4) Reaction delay — wait before starting to aim
+        if (reactionDelayActive) {
+            float actualReaction = reactionMs + randFloat(-30.0F, 30.0F);
+            long elapsed = System.currentTimeMillis() - targetAcquiredMs;
+            if (elapsed < (long) actualReaction) {
+                return;
+            }
+            reactionDelayActive = false;
         }
 
-        // Attack logic
+        // --- Compute desired server rotation ---
+        float[] desired = getTargetAngles(player, currentTarget);
+
+        // (4) Intentional miss simulation
+        if (missTicksRemaining > 0) {
+            desired[0] += missOffsetYaw;
+            desired[1] += missOffsetPitch;
+            missTicksRemaining--;
+        } else if (rng().nextFloat() < 0.008F) {
+            missTicksRemaining = randInt(3, 8);
+            missOffsetYaw = randFloat(-3.0F, 3.0F);
+            missOffsetPitch = randFloat(-2.0F, 2.0F);
+        }
+
+        // (3) Smooth rotation with adaptive speed
+        float[] smoothed = tickSmoothRotation(player, desired, aimSpeed);
+        float newYaw = smoothed[0];
+        float newPitch = smoothed[1];
+
+        // (1) Overshoot simulation
+        newYaw += tickOvershoot(0);
+        newPitch += tickOvershoot(1);
+
+        // (4) Micro-jitter
+        newYaw += randFloat(-0.4F, 0.4F);
+        newPitch += randFloat(-0.2F, 0.2F);
+
+        // (4) Drift
+        tickDrift();
+        newYaw += driftYaw;
+        newPitch += driftPitch;
+
+        // (4) Micro-tremor (sinusoidal)
+        long ms = System.currentTimeMillis();
+        newYaw += (float)(Math.sin(ms * 0.013) * 0.2 + Math.sin(ms * 0.0037) * 0.12);
+        newPitch += (float)(Math.sin(ms * 0.011) * 0.1 + Math.cos(ms * 0.0029) * 0.06);
+
+        newPitch = MathHelper.clamp(newPitch, -90.0F, 90.0F);
+
+        // (2) GCD spoofing
+        RotationHandler.setServerRotation(newYaw, newPitch);
+        if (gcdFix) {
+            RotationHandler.applyGCDToServerRotation();
+        }
+
+        // (8) Movement-aware body yaw
+        if (moveAware) {
+            tickMovementAwareBodyYaw(player, silentAim);
+        }
+
+        // Apply rotation to player or keep silent
+        if (!silentAim) {
+            RotationHandler.applyToPlayer(player);
+        }
+
+        RotationHandler.commitServerRotation();
+
+        // --- Aim readiness check ---
+        float yawDiff = MathHelper.wrapDegrees(desired[0] - RotationHandler.getServerYaw());
+        float pitchDiff = desired[1] - RotationHandler.getServerPitch();
+        float totalDiff = MathHelper.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
+        isAiming = totalDiff < randFloat(5.0F, 9.0F);
+
+        // (7) Pre-aim — don't attack until pre-aim ticks have passed
+        if (!preAimDone) {
+            preAimTicks--;
+            if (preAimTicks <= 0) {
+                preAimDone = true;
+            }
+            return;
+        }
+
+        // --- (6) Click humanization + attack logic ---
         ticksSinceAttack++;
+
+        // Skip click simulation
+        if (skipNextClick) {
+            skipNextClick = false;
+            if (rng().nextFloat() < 0.08F) {
+                skipNextClick = true; // chain skip (rare)
+            }
+            return;
+        }
+
         if (player.getAttackCooldownProgress(0.0F) < 1.0F) return;
         if (ticksSinceAttack < nextAttackDelay) return;
         if (!isAiming) return;
 
+        // (4) Only Crit check
         if (critOnly) {
             boolean falling = !player.isOnGround()
                     && player.getVelocity().y < 0.0
@@ -143,205 +276,207 @@ public final class KillAuraHandler {
             if (!falling) return;
         }
 
-        // Final distance re-check with slight randomization
-        float attackRange = range - randomFloat(0.0F, 0.15F);
+        // Final distance re-check
+        float attackRange = range - randFloat(0.0F, 0.15F);
         if (player.distanceTo(currentTarget) > attackRange) return;
 
-        client.interactionManager.attackEntity(player, currentTarget);
-        player.swingHand(Hand.MAIN_HAND);
-        ticksSinceAttack = 0;
-        lastAttackTimeMs = System.currentTimeMillis();
+        // --- ATTACK ---
+        // For silent aim: temporarily apply server rotation for the attack packet
+        if (silentAim) {
+            float savedYaw = player.getYaw();
+            float savedPitch = player.getPitch();
+            player.setYaw(RotationHandler.getServerYaw());
+            player.setPitch(RotationHandler.getServerPitch());
 
-        // Gaussian-distributed delay between attacks
-        nextAttackDelay = computeNextDelay(minAps, maxAps);
+            client.interactionManager.attackEntity(player, currentTarget);
+            player.swingHand(Hand.MAIN_HAND);
 
-        // Small chance of double-tap correction after attack
-        if (ThreadLocalRandom.current().nextFloat() < 0.15F) {
-            correctionPhase = 1;
-            correctionTicks = randomInt(2, 5);
-            overshootYaw = randomFloat(-1.5F, 1.5F);
-            overshootPitch = randomFloat(-0.8F, 0.8F);
-        }
-    }
-
-    // --- Human-like bezier curve rotation ---
-
-    private static void initBezierCurve(ClientPlayerEntity player, LivingEntity target, float aimSpeed) {
-        float[] dest = getTargetAngles(player, target);
-        bezierYawStart = player.getYaw();
-        bezierPitchStart = player.getPitch();
-        bezierYawEnd = dest[0];
-        bezierPitchEnd = dest[1];
-
-        float yawDelta = MathHelper.wrapDegrees(bezierYawEnd - bezierYawStart);
-        float pitchDelta = bezierPitchEnd - bezierPitchStart;
-
-        // Control points with randomized overshoot
-        float overshoot = randomFloat(0.05F, 0.2F);
-        bezierCtrlYaw1 = bezierYawStart + yawDelta * randomFloat(0.3F, 0.5F)
-                + randomFloat(-3.0F, 3.0F);
-        bezierCtrlPitch1 = bezierPitchStart + pitchDelta * randomFloat(0.2F, 0.5F)
-                + randomFloat(-1.5F, 1.5F);
-        bezierCtrlYaw2 = bezierYawStart + yawDelta * (1.0F + overshoot * sign(yawDelta))
-                + randomFloat(-1.5F, 1.5F);
-        bezierCtrlPitch2 = bezierPitchStart + pitchDelta * (1.0F + overshoot * 0.5F)
-                + randomFloat(-0.5F, 0.5F);
-
-        float dist = MathHelper.sqrt(yawDelta * yawDelta + pitchDelta * pitchDelta);
-        float normalizedSpeed = (aimSpeed / 100.0F) * randomFloat(0.85F, 1.15F);
-        bezierSpeed = MathHelper.clamp(normalizedSpeed * 12.0F / Math.max(dist, 5.0F), 0.04F, 0.35F);
-        bezierProgress = 0.0F;
-        bezierActive = true;
-    }
-
-    private static void tickHumanRotation(ClientPlayerEntity player, LivingEntity target, float aimSpeed) {
-        float[] dest = getTargetAngles(player, target);
-        float yawDiff = MathHelper.wrapDegrees(dest[0] - player.getYaw());
-        float pitchDiff = dest[1] - player.getPitch();
-        float totalDiff = MathHelper.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
-
-        // Update drift simulation
-        tickDrift();
-
-        if (bezierActive && bezierProgress < 1.0F) {
-            // Follow bezier path for large angle changes
-            bezierYawEnd = dest[0];
-            bezierPitchEnd = dest[1];
-
-            bezierProgress = Math.min(1.0F, bezierProgress + bezierSpeed * randomFloat(0.9F, 1.1F));
-            float t = easeInOutCubic(bezierProgress);
-
-            float newYaw = cubicBezier(t, bezierYawStart, bezierCtrlYaw1, bezierCtrlYaw2, bezierYawEnd);
-            float newPitch = cubicBezier(t, bezierPitchStart, bezierCtrlPitch1, bezierCtrlPitch2, bezierPitchEnd);
-
-            // Add micro-jitter
-            newYaw += randomFloat(-0.3F, 0.3F) + driftYaw;
-            newPitch += randomFloat(-0.15F, 0.15F) + driftPitch;
-
-            player.setYaw(newYaw);
-            player.setPitch(MathHelper.clamp(newPitch, -90.0F, 90.0F));
-
-            if (bezierProgress >= 1.0F) {
-                bezierActive = false;
-            }
+            player.setYaw(savedYaw);
+            player.setPitch(savedPitch);
         } else {
-            // Fine-tracking mode: small corrections
-            tickMicroCorrections(player, dest, totalDiff, aimSpeed);
+            client.interactionManager.attackEntity(player, currentTarget);
+            player.swingHand(Hand.MAIN_HAND);
         }
 
-        // Apply post-attack overshoot correction
-        if (correctionPhase == 1 && correctionTicks > 0) {
-            player.setYaw(player.getYaw() + overshootYaw / correctionTicks);
-            player.setPitch(MathHelper.clamp(
-                    player.getPitch() + overshootPitch / correctionTicks, -90.0F, 90.0F));
-            correctionTicks--;
-            if (correctionTicks <= 0) {
-                correctionPhase = 2;
-                correctionTicks = randomInt(3, 6);
-            }
-        } else if (correctionPhase == 2 && correctionTicks > 0) {
-            player.setYaw(player.getYaw() - overshootYaw * 0.7F / correctionTicks);
-            player.setPitch(MathHelper.clamp(
-                    player.getPitch() - overshootPitch * 0.7F / correctionTicks, -90.0F, 90.0F));
-            correctionTicks--;
-            if (correctionTicks <= 0) {
-                correctionPhase = 0;
-            }
+        ticksSinceAttack = 0;
+
+        // (6) Gaussian-distributed next delay
+        nextAttackDelay = computeGaussianDelay(minAps, maxAps);
+
+        // (6) Double-click chance
+        if (rng().nextFloat() < 0.1F) {
+            doubleClickQueued = true;
         }
 
-        isAiming = totalDiff < randomFloat(5.0F, 9.0F);
+        // (6) Skip click chance
+        if (rng().nextFloat() < 0.05F) {
+            skipNextClick = true;
+        }
+
+        // (1) Post-attack overshoot
+        if (rng().nextFloat() < 0.2F) {
+            overshootPhase = 1;
+            overshootTicks = randInt(2, 5);
+            overshootDeltaYaw = randFloat(-2.0F, 2.0F);
+            overshootDeltaPitch = randFloat(-1.0F, 1.0F);
+        }
+
+        // (6) Execute double-click on next tick
+        if (doubleClickQueued && player.getAttackCooldownProgress(0.0F) >= 0.8F) {
+            doubleClickQueued = false;
+            // Attack again immediately (simulates double-click)
+            if (silentAim) {
+                float savedYaw = player.getYaw();
+                float savedPitch = player.getPitch();
+                player.setYaw(RotationHandler.getServerYaw());
+                player.setPitch(RotationHandler.getServerPitch());
+                client.interactionManager.attackEntity(player, currentTarget);
+                player.setYaw(savedYaw);
+                player.setPitch(savedPitch);
+            } else {
+                client.interactionManager.attackEntity(player, currentTarget);
+            }
+        }
     }
 
-    private static void tickMicroCorrections(ClientPlayerEntity player, float[] dest,
-                                              float totalDiff, float aimSpeed) {
-        float yawDiff = MathHelper.wrapDegrees(dest[0] - player.getYaw());
-        float pitchDiff = dest[1] - player.getPitch();
+    // ==================== (3) SMOOTH ROTATION ====================
 
-        float speedMult = (aimSpeed / 100.0F) * randomFloat(0.7F, 1.3F);
+    private static float[] tickSmoothRotation(ClientPlayerEntity player, float[] dest, float aimSpeed) {
+        float currentYaw, currentPitch;
+        if (smoothInitialized) {
+            currentYaw = smoothYaw;
+            currentPitch = smoothPitch;
+        } else {
+            currentYaw = RotationHandler.isActive()
+                    ? RotationHandler.getServerYaw()
+                    : player.getYaw();
+            currentPitch = RotationHandler.isActive()
+                    ? RotationHandler.getServerPitch()
+                    : player.getPitch();
+            smoothInitialized = true;
+        }
 
-        // Non-linear speed: faster for large angles, slower for small
-        float yawSpeed = computeAdaptiveSpeed(yawDiff, 40.0F) * speedMult;
-        float pitchSpeed = computeAdaptiveSpeed(pitchDiff, 30.0F) * speedMult;
+        float yawDiff = MathHelper.wrapDegrees(dest[0] - currentYaw);
+        float pitchDiff = dest[1] - currentPitch;
 
-        // Add human micro-tremor
-        float tremorYaw = (float) (Math.sin(System.currentTimeMillis() * 0.013) * 0.25
-                + Math.sin(System.currentTimeMillis() * 0.0037) * 0.15);
-        float tremorPitch = (float) (Math.sin(System.currentTimeMillis() * 0.011) * 0.12
-                + Math.cos(System.currentTimeMillis() * 0.0029) * 0.08);
+        float speedMult = (aimSpeed / 100.0F) * randFloat(0.75F, 1.25F);
 
-        float newYaw = player.getYaw() + yawSpeed + tremorYaw + driftYaw;
-        float newPitch = player.getPitch() + pitchSpeed + tremorPitch + driftPitch;
+        // Adaptive speed: faster when far, slower when close (exponential)
+        float yawStep = adaptiveStep(yawDiff, 40.0F) * speedMult;
+        float pitchStep = adaptiveStep(pitchDiff, 30.0F) * speedMult;
 
-        player.setYaw(newYaw);
-        player.setPitch(MathHelper.clamp(newPitch, -90.0F, 90.0F));
+        smoothYaw = currentYaw + yawStep;
+        smoothPitch = MathHelper.clamp(currentPitch + pitchStep, -90.0F, 90.0F);
+
+        return new float[]{smoothYaw, smoothPitch};
     }
 
-    private static void tickSimpleRotation(ClientPlayerEntity player, LivingEntity target, float aimSpeed) {
-        float[] dest = getTargetAngles(player, target);
-        float yawDiff = MathHelper.wrapDegrees(dest[0] - player.getYaw());
-        float pitchDiff = dest[1] - player.getPitch();
-
-        float speedMult = (aimSpeed / 100.0F) * randomFloat(0.8F, 1.2F);
-        float maxYaw = 35.0F * speedMult;
-        float maxPitch = 25.0F * speedMult;
-
-        float jitterYaw = randomFloat(-2.0F, 2.0F);
-        float jitterPitch = randomFloat(-1.0F, 1.0F);
-
-        float yawStep = MathHelper.clamp(yawDiff + jitterYaw, -maxYaw, maxYaw);
-        float pitchStep = MathHelper.clamp(pitchDiff + jitterPitch, -maxPitch, maxPitch);
-
-        player.setYaw(player.getYaw() + yawStep);
-        player.setPitch(MathHelper.clamp(player.getPitch() + pitchStep, -90.0F, 90.0F));
-
-        isAiming = Math.abs(yawDiff) < 8.0F && Math.abs(pitchDiff) < 8.0F;
+    private static float adaptiveStep(float diff, float maxSpeed) {
+        float abs = Math.abs(diff);
+        float factor;
+        if (abs > 30.0F) {
+            factor = 0.55F + randFloat(-0.05F, 0.05F);
+        } else if (abs > 12.0F) {
+            factor = 0.35F + randFloat(-0.05F, 0.05F);
+        } else if (abs > 4.0F) {
+            factor = 0.2F + randFloat(-0.04F, 0.04F);
+        } else if (abs > 1.0F) {
+            factor = 0.12F + randFloat(-0.03F, 0.03F);
+        } else {
+            factor = 0.05F + randFloat(-0.02F, 0.02F);
+        }
+        return MathHelper.clamp(diff * factor, -maxSpeed, maxSpeed);
     }
 
-    // --- Drift simulation (human hand fatigue) ---
+    // ==================== (1) OVERSHOOT ====================
+
+    private static float tickOvershoot(int axis) {
+        if (overshootPhase == 0) return 0.0F;
+        float delta = axis == 0 ? overshootDeltaYaw : overshootDeltaPitch;
+        if (overshootPhase == 1) {
+            float result = delta / Math.max(overshootTicks, 1);
+            overshootTicks--;
+            if (overshootTicks <= 0) {
+                overshootPhase = 2;
+                overshootTicks = randInt(3, 7);
+            }
+            return result;
+        } else if (overshootPhase == 2) {
+            float result = -delta * 0.65F / Math.max(overshootTicks, 1);
+            overshootTicks--;
+            if (overshootTicks <= 0) {
+                overshootPhase = 0;
+            }
+            return result;
+        }
+        return 0.0F;
+    }
+
+    // ==================== (4) DRIFT ====================
 
     private static void tickDrift() {
         driftChangeTicks--;
         if (driftChangeTicks <= 0) {
-            targetDriftYaw = randomFloat(-0.35F, 0.35F);
-            targetDriftPitch = randomFloat(-0.15F, 0.15F);
-            driftChangeTicks = randomInt(20, 60);
+            targetDriftYaw = randFloat(-0.3F, 0.3F);
+            targetDriftPitch = randFloat(-0.12F, 0.12F);
+            driftChangeTicks = randInt(20, 60);
         }
         driftYaw += (targetDriftYaw - driftYaw) * 0.1F;
         driftPitch += (targetDriftPitch - driftPitch) * 0.1F;
     }
 
-    // --- Line of sight ---
+    // ==================== (8) MOVEMENT-AWARE BODY YAW ====================
+
+    private static void tickMovementAwareBodyYaw(ClientPlayerEntity player, boolean silent) {
+        Vec3d velocity = player.getVelocity();
+        double speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+        if (speed > 0.01) {
+            float moveYaw = (float) Math.toDegrees(Math.atan2(-velocity.x, velocity.z));
+            lastMoveYaw += MathHelper.wrapDegrees(moveYaw - lastMoveYaw) * 0.3F;
+
+            // Blend body yaw between movement direction and aim direction
+            float serverYaw = RotationHandler.getServerYaw();
+            float blended = lastMoveYaw + MathHelper.wrapDegrees(serverYaw - lastMoveYaw) * 0.6F;
+
+            if (silent) {
+                // Update body yaw to look natural from other players' perspective
+                player.bodyYaw = blended;
+                player.headYaw = player.getYaw();
+            } else {
+                player.bodyYaw = blended;
+            }
+        }
+    }
+
+    // ==================== LINE OF SIGHT ====================
 
     private static boolean hasLineOfSight(MinecraftClient client, ClientPlayerEntity player,
                                            LivingEntity target) {
         Vec3d eyePos = player.getEyePos();
-
-        // Check three points: head, center, feet
-        Vec3d[] checkPoints = {
+        Vec3d[] points = {
                 new Vec3d(target.getX(), target.getY() + target.getHeight() * 0.85, target.getZ()),
                 new Vec3d(target.getX(), target.getY() + target.getHeight() * 0.5, target.getZ()),
                 new Vec3d(target.getX(), target.getY() + 0.1, target.getZ())
         };
-
-        for (Vec3d point : checkPoints) {
+        for (Vec3d point : points) {
             BlockHitResult result = client.world.raycast(new RaycastContext(
                     eyePos, point,
                     RaycastContext.ShapeType.COLLIDER,
                     RaycastContext.FluidHandling.NONE,
                     player
             ));
-            if (result.getType() == HitResult.Type.MISS
-                    || result.getBlockPos().equals(new BlockPos(
-                    (int) Math.floor(target.getX()),
-                    (int) Math.floor(target.getY()),
-                    (int) Math.floor(target.getZ())))) {
-                return true;
-            }
+            if (result.getType() == HitResult.Type.MISS) return true;
+            BlockPos hitPos = result.getBlockPos();
+            BlockPos targetPos = new BlockPos(
+                    MathHelper.floor(target.getX()),
+                    MathHelper.floor(target.getY()),
+                    MathHelper.floor(target.getZ()));
+            if (hitPos.equals(targetPos)) return true;
         }
         return false;
     }
 
-    // --- Target finding and sorting ---
+    // ==================== (5) TARGET FINDING & SELECTION ====================
 
     private static List<LivingEntity> findTargets(MinecraftClient client, ClientPlayerEntity player,
                                                    float range, boolean hitMobs, boolean hitPlayers,
@@ -358,8 +493,8 @@ public final class KillAuraHandler {
 
             // FOV check
             Vec3d toEntity = living.getPos().subtract(player.getPos()).normalize();
-            double angle = Math.toDegrees(Math.acos(MathHelper.clamp(
-                    lookVec.dotProduct(toEntity), -1.0, 1.0)));
+            double dot = lookVec.dotProduct(toEntity);
+            double angle = Math.toDegrees(Math.acos(MathHelper.clamp(dot, -1.0, 1.0)));
             if (angle > fov / 2.0) continue;
 
             boolean isMob = entity instanceof Monster;
@@ -373,113 +508,67 @@ public final class KillAuraHandler {
 
             result.add(living);
         }
-
         return result;
     }
 
     private static void sortTargets(List<LivingEntity> targets, ClientPlayerEntity player,
                                     String mode) {
+        Vec3d look = player.getRotationVecClient();
         switch (mode) {
             case "Health" -> targets.sort(Comparator.comparingDouble(LivingEntity::getHealth));
-            case "Angle" -> {
-                Vec3d look = player.getRotationVecClient();
-                targets.sort(Comparator.comparingDouble(e -> {
-                    Vec3d toE = e.getPos().subtract(player.getPos()).normalize();
-                    return -look.dotProduct(toE); // smaller angle = higher dot product
-                }));
-            }
-            default -> // "Distance" or fallback
-                    targets.sort(Comparator.comparingDouble(e -> {
-                        double d = player.distanceTo(e);
-                        double healthPenalty = (e.getHealth() / 20.0) * 0.5;
-                        return d + healthPenalty;
-                    }));
+            case "Angle" -> targets.sort(Comparator.comparingDouble(e -> {
+                Vec3d toE = e.getPos().subtract(player.getPos()).normalize();
+                return -look.dotProduct(toE);
+            }));
+            default -> targets.sort(Comparator.comparingDouble(e -> {
+                double dist = player.distanceTo(e);
+                double healthW = (e.getHealth() / 20.0) * 0.3;
+                Vec3d toE = e.getPos().subtract(player.getPos()).normalize();
+                double angleW = (1.0 - look.dotProduct(toE)) * 0.4;
+                return dist + healthW + angleW;
+            }));
         }
     }
 
-    // --- Angle computation ---
+    // ==================== ANGLE COMPUTATION ====================
 
     private static float[] getTargetAngles(ClientPlayerEntity player, LivingEntity target) {
-        Vec3d playerEyes = player.getEyePos();
-
-        // Randomized aim point on target body
-        double aimHeight = target.getHeight() * randomFloat(0.35F, 0.75F);
-        double targetY = target.getY() + aimHeight;
+        Vec3d eyePos = player.getEyePos();
+        double aimH = target.getHeight() * randFloat(0.35F, 0.75F);
         Vec3d targetPos = new Vec3d(
-                target.getX() + randomFloat(-0.05F, 0.05F),
-                targetY,
-                target.getZ() + randomFloat(-0.05F, 0.05F)
+                target.getX() + randFloat(-0.04F, 0.04F),
+                target.getY() + aimH,
+                target.getZ() + randFloat(-0.04F, 0.04F)
         );
-
-        double dx = targetPos.x - playerEyes.x;
-        double dy = targetPos.y - playerEyes.y;
-        double dz = targetPos.z - playerEyes.z;
+        double dx = targetPos.x - eyePos.x;
+        double dy = targetPos.y - eyePos.y;
+        double dz = targetPos.z - eyePos.z;
         double dist = Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
         float pitch = (float) Math.toDegrees(-Math.atan2(dy, dist));
         return new float[]{yaw, MathHelper.clamp(pitch, -90.0F, 90.0F)};
     }
 
-    // --- Attack delay computation (Gaussian) ---
+    // ==================== (6) CLICK DELAY (GAUSSIAN) ====================
 
-    private static int computeNextDelay(float minAps, float maxAps) {
-        float meanAps = (minAps + maxAps) / 2.0F;
-        float stdDev = (maxAps - minAps) / 4.0F;
-
-        // Gaussian CPS with clamping
-        double gaussianAps = meanAps + ThreadLocalRandom.current().nextGaussian() * stdDev;
-        gaussianAps = MathHelper.clamp(gaussianAps, minAps, maxAps);
-
-        // Convert APS to tick delay (20 ticks/sec)
-        int delay = (int) Math.round(20.0 / gaussianAps);
-
-        // Small random variance on top
-        delay += randomInt(-1, 1);
+    private static int computeGaussianDelay(float minAps, float maxAps) {
+        float mean = (minAps + maxAps) / 2.0F;
+        float std = (maxAps - minAps) / 4.0F;
+        double cps = mean + rng().nextGaussian() * std;
+        cps = MathHelper.clamp(cps, minAps, maxAps);
+        int delay = (int) Math.round(20.0 / cps);
+        delay += randInt(-1, 1);
         return Math.max(1, delay);
     }
 
-    // --- Bezier math ---
+    // ==================== UTILITY ====================
 
-    private static float cubicBezier(float t, float p0, float p1, float p2, float p3) {
-        float u = 1.0F - t;
-        return u * u * u * p0
-                + 3.0F * u * u * t * p1
-                + 3.0F * u * t * t * p2
-                + t * t * t * p3;
-    }
-
-    private static float easeInOutCubic(float t) {
-        return t < 0.5F
-                ? 4.0F * t * t * t
-                : 1.0F - (float) Math.pow(-2.0F * t + 2.0F, 3) / 2.0F;
-    }
-
-    // --- Adaptive speed (non-linear) ---
-
-    private static float computeAdaptiveSpeed(float diff, float maxSpeed) {
-        float absDiff = Math.abs(diff);
-        // Quadratic curve: fast when far, slow when close
-        float factor;
-        if (absDiff > 15.0F) {
-            factor = 0.6F + randomFloat(-0.05F, 0.05F);
-        } else if (absDiff > 5.0F) {
-            factor = 0.3F + randomFloat(-0.05F, 0.05F);
-        } else if (absDiff > 1.5F) {
-            factor = 0.15F + randomFloat(-0.03F, 0.03F);
-        } else {
-            factor = 0.06F + randomFloat(-0.02F, 0.02F);
-        }
-        return MathHelper.clamp(diff * factor, -maxSpeed, maxSpeed);
-    }
-
-    // --- Utility ---
-
-    private static float getSetting(Module mod, String name, float fallback) {
+    private static float getFloat(Module mod, String name, float fallback) {
         ModuleSetting s = mod.getSetting(name);
         return s != null ? s.getFloat() : fallback;
     }
 
-    private static boolean getToggle(Module mod, String name) {
+    private static boolean getBool(Module mod, String name) {
         ModuleSetting s = mod.getSetting(name);
         return s != null && s.getBool();
     }
@@ -489,24 +578,30 @@ public final class KillAuraHandler {
         return s != null ? s.getChoiceValue() : "";
     }
 
-    private static float randomFloat(float min, float max) {
-        return min + ThreadLocalRandom.current().nextFloat() * (max - min);
+    private static ThreadLocalRandom rng() {
+        return ThreadLocalRandom.current();
     }
 
-    private static int randomInt(int min, int max) {
-        return ThreadLocalRandom.current().nextInt(min, max + 1);
+    private static float randFloat(float min, float max) {
+        return min + rng().nextFloat() * (max - min);
     }
 
-    private static float sign(float v) {
-        return v >= 0 ? 1.0F : -1.0F;
+    private static int randInt(int min, int max) {
+        return rng().nextInt(min, max + 1);
     }
 
     private static void reset() {
         currentTarget = null;
         isAiming = false;
-        bezierActive = false;
-        correctionPhase = 0;
+        smoothInitialized = false;
+        overshootPhase = 0;
+        reactionDelayActive = false;
+        preAimDone = false;
         pauseTicks = 0;
+        missTicksRemaining = 0;
+        doubleClickQueued = false;
+        skipNextClick = false;
+        RotationHandler.setActive(false);
     }
 
     public static LivingEntity getCurrentTarget() {
