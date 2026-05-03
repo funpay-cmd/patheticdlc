@@ -17,3 +17,5 @@ Thumbs.db
 
 # Loom run dirs
 run/
+__pycache__/
+*.pyc
