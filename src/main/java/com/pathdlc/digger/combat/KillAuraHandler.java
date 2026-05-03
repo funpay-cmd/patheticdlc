@@ -79,6 +79,9 @@ public final class KillAuraHandler {
     // --- Movement-aware body yaw ---
     private static float lastMoveYaw;
 
+    // --- Target switch threshold (generated once per switch cycle) ---
+    private static int switchThreshold = 60;
+
     public static void tick(MinecraftClient client) {
         if (!ModuleManager.isEnabled("KillAura")) {
             reset();
@@ -103,7 +106,7 @@ public final class KillAuraHandler {
         float sensitivity = getFloat(mod, "GCD Sens", 0.5F);
         boolean silentAim = getBool(mod, "Silent Aim");
         boolean gcdFix = getBool(mod, "GCD Fix");
-        boolean smartAim = getBool(mod, "Smart Aim");
+        boolean humanAim = getBool(mod, "Smart Aim");
         boolean losCheck = getBool(mod, "LoS Check");
         boolean critOnly = getBool(mod, "Only Crit");
         boolean hitMobs = getBool(mod, "Attack Mobs");
@@ -115,7 +118,7 @@ public final class KillAuraHandler {
         if (gcdFix) {
             RotationHandler.updateGCD(sensitivity);
         } else {
-            RotationHandler.updateGCD(0.0F);
+            RotationHandler.clearGCD();
         }
 
         // --- Silent Aim toggle ---
@@ -153,12 +156,13 @@ public final class KillAuraHandler {
                 || !currentTarget.isAlive()
                 || player.distanceTo(currentTarget) > range + 0.5F
                 || !targets.contains(currentTarget)
-                || switchTimer > randInt(40, 80);
+                || switchTimer > switchThreshold;
 
         if (needSwitch) {
             LivingEntity prev = currentTarget;
             currentTarget = targets.get(0);
             switchTimer = 0;
+            switchThreshold = randInt(40, 80);
             if (prev != currentTarget) {
                 // (4) Reaction time on new target
                 targetAcquiredMs = System.currentTimeMillis();
@@ -194,29 +198,37 @@ public final class KillAuraHandler {
             missOffsetPitch = randFloat(-2.0F, 2.0F);
         }
 
-        // (3) Smooth rotation with adaptive speed
-        float[] smoothed = tickSmoothRotation(player, desired, aimSpeed);
-        float newYaw = smoothed[0];
-        float newPitch = smoothed[1];
+        float newYaw, newPitch;
+        if (humanAim) {
+            // (3) Smooth rotation with adaptive speed
+            float[] smoothed = tickSmoothRotation(player, desired, aimSpeed);
+            newYaw = smoothed[0];
+            newPitch = smoothed[1];
 
-        // (1) Overshoot simulation
-        float[] overshootDeltas = tickOvershoot();
-        newYaw += overshootDeltas[0];
-        newPitch += overshootDeltas[1];
+            // (1) Overshoot simulation
+            float[] overshootDeltas = tickOvershoot();
+            newYaw += overshootDeltas[0];
+            newPitch += overshootDeltas[1];
 
-        // (4) Micro-jitter
-        newYaw += randFloat(-0.4F, 0.4F);
-        newPitch += randFloat(-0.2F, 0.2F);
+            // (4) Micro-jitter
+            newYaw += randFloat(-0.4F, 0.4F);
+            newPitch += randFloat(-0.2F, 0.2F);
 
-        // (4) Drift
-        tickDrift();
-        newYaw += driftYaw;
-        newPitch += driftPitch;
+            // (4) Drift
+            tickDrift();
+            newYaw += driftYaw;
+            newPitch += driftPitch;
 
-        // (4) Micro-tremor (sinusoidal)
-        long ms = System.currentTimeMillis();
-        newYaw += (float)(Math.sin(ms * 0.013) * 0.2 + Math.sin(ms * 0.0037) * 0.12);
-        newPitch += (float)(Math.sin(ms * 0.011) * 0.1 + Math.cos(ms * 0.0029) * 0.06);
+            // (4) Micro-tremor (sinusoidal)
+            long ms = System.currentTimeMillis();
+            newYaw += (float)(Math.sin(ms * 0.013) * 0.2 + Math.sin(ms * 0.0037) * 0.12);
+            newPitch += (float)(Math.sin(ms * 0.011) * 0.1 + Math.cos(ms * 0.0029) * 0.06);
+        } else {
+            // Direct aim (rage mode) — snap to target with minimal jitter
+            newYaw = desired[0] + randFloat(-0.5F, 0.5F);
+            newPitch = desired[1] + randFloat(-0.3F, 0.3F);
+            smoothInitialized = false;
+        }
 
         newPitch = MathHelper.clamp(newPitch, -90.0F, 90.0F);
 
@@ -315,19 +327,9 @@ public final class KillAuraHandler {
     }
 
     private static void doAttack(MinecraftClient client, ClientPlayerEntity player, boolean silentAim) {
-        if (silentAim) {
-            float savedYaw = player.getYaw();
-            float savedPitch = player.getPitch();
-            player.setYaw(RotationHandler.getServerYaw());
-            player.setPitch(RotationHandler.getServerPitch());
-            client.interactionManager.attackEntity(player, currentTarget);
-            player.swingHand(Hand.MAIN_HAND);
-            player.setYaw(savedYaw);
-            player.setPitch(savedPitch);
-        } else {
-            client.interactionManager.attackEntity(player, currentTarget);
-            player.swingHand(Hand.MAIN_HAND);
-        }
+        if (currentTarget == null || !currentTarget.isAlive()) return;
+        client.interactionManager.attackEntity(player, currentTarget);
+        player.swingHand(Hand.MAIN_HAND);
     }
 
     // ==================== (3) SMOOTH ROTATION ====================
@@ -593,6 +595,7 @@ public final class KillAuraHandler {
         missTicksRemaining = 0;
         doubleClickQueued = false;
         skipNextClick = false;
+        switchThreshold = 60;
         RotationHandler.setActive(false);
     }
 

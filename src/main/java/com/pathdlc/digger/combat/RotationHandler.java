@@ -73,6 +73,10 @@ public final class RotationHandler {
         gcdValue = f * f * f * 1.2F;
     }
 
+    public static void clearGCD() {
+        gcdValue = 0.0F;
+    }
+
     public static float getGCD() {
         return gcdValue;
     }
