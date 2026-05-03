@@ -31,6 +31,17 @@ public final class RotationHandler {
     private static boolean initialized;
 
     public static void setActive(boolean state) {
+        if (state && !active) {
+            // Transitioning to active: seed server rotation from player's current
+            // rotation so the mixin never sends stale values on early-return ticks
+            ClientPlayerEntity player = MinecraftClient.getInstance().player;
+            if (player != null) {
+                serverYaw = player.getYaw();
+                serverPitch = player.getPitch();
+                prevServerYaw = serverYaw;
+                prevServerPitch = serverPitch;
+            }
+        }
         active = state;
         if (!state) {
             initialized = false;
