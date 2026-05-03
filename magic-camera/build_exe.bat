@@ -13,7 +13,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [1/3] Installing dependencies...
+echo [1/4] Installing dependencies...
 python -m pip install -r requirements.txt pyinstaller
 if errorlevel 1 (
     echo [ERROR] Failed to install dependencies.
@@ -22,7 +22,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Detecting mediapipe path...
+echo [2/4] Detecting mediapipe path...
 for /f "tokens=*" %%i in ('python -c "import mediapipe, os; print(os.path.dirname(mediapipe.__file__))"') do set MP_PATH=%%i
 
 if "%MP_PATH%"=="" (
