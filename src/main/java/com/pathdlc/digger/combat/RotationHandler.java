@@ -30,6 +30,10 @@ public final class RotationHandler {
     private static float visualHeadYaw;
     private static float visualBodyYaw;
 
+    // Movement correction state (for non-silent mode)
+    private static float movementCorrectionDiff = 0.0F;
+    private static boolean movementCorrectionActive = false;
+
     // GCD state
     private static float gcdValue = 0.0F;
 
@@ -189,6 +193,31 @@ public final class RotationHandler {
     public static void applyToPlayer(ClientPlayerEntity player) {
         player.setYaw(serverYaw);
         player.setPitch(serverPitch);
+    }
+
+    // --- Movement correction ---
+
+    /**
+     * Set movement correction: the yaw difference between aim direction and
+     * the player's original look direction. The MovementFixMixin uses this
+     * to transform travel() input so WASD still moves in the intended direction.
+     */
+    public static void setMovementCorrection(float originalYaw, float aimYaw) {
+        movementCorrectionDiff = MathHelper.wrapDegrees(aimYaw - originalYaw);
+        movementCorrectionActive = Math.abs(movementCorrectionDiff) > 0.01F;
+    }
+
+    public static void clearMovementCorrection() {
+        movementCorrectionActive = false;
+        movementCorrectionDiff = 0.0F;
+    }
+
+    public static boolean isMovementCorrectionActive() {
+        return movementCorrectionActive;
+    }
+
+    public static float getMovementCorrectionDiff() {
+        return movementCorrectionDiff;
     }
 
     private RotationHandler() {

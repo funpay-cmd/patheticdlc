@@ -154,6 +154,7 @@ public final class KillAuraHandler {
 
         // --- Silent Aim toggle ---
         RotationHandler.setActive(silentAim);
+        RotationHandler.clearMovementCorrection();
 
         // --- Polar: VL decay cooldown — stop attacking to let VL drop ---
         if (vlDecayCooldown > 0) {
@@ -301,8 +302,8 @@ public final class KillAuraHandler {
             float prevPitch = RotationHandler.getServerPitch();
             float deltaYaw = MathHelper.wrapDegrees(newYaw - prevYaw);
             float deltaPitch = newPitch - prevPitch;
-            float maxYawPerTick = 45.0F + randFloat(-5.0F, 5.0F);
-            float maxPitchPerTick = 35.0F + randFloat(-3.0F, 3.0F);
+            float maxYawPerTick = 80.0F + randFloat(-8.0F, 8.0F);
+            float maxPitchPerTick = 60.0F + randFloat(-5.0F, 5.0F);
             deltaYaw = MathHelper.clamp(deltaYaw, -maxYawPerTick, maxYawPerTick);
             deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
             newYaw = prevYaw + deltaYaw;
@@ -317,8 +318,10 @@ public final class KillAuraHandler {
                 RotationHandler.applyGCDToServerRotation();
             }
 
-            // Apply to player camera (non-silent mode)
+            // Apply to player camera (non-silent mode) with movement correction
+            float originalYaw = player.getYaw();
             RotationHandler.applyToPlayer(player);
+            RotationHandler.setMovementCorrection(originalYaw, RotationHandler.getServerYaw());
             RotationHandler.commitServerRotation();
 
             if (moveAware) {
@@ -430,7 +433,7 @@ public final class KillAuraHandler {
             float[] desired = getCleanTargetAngles(player, target);
             float yawDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - player.getYaw()));
             float pitchDiff = Math.abs(desired[1] - player.getPitch());
-            if (yawDiff > 4.0F || pitchDiff > 4.0F) return false;
+            if (yawDiff > 8.0F || pitchDiff > 8.0F) return false;
         }
 
         return true;
@@ -1020,6 +1023,7 @@ public final class KillAuraHandler {
         accelYawVelocity = 0.0F;
         accelPitchVelocity = 0.0F;
         RotationHandler.setActive(false);
+        RotationHandler.clearMovementCorrection();
     }
 
     public static LivingEntity getCurrentTarget() {
