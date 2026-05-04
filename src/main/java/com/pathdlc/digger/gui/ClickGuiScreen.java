@@ -73,10 +73,23 @@ public class ClickGuiScreen extends Screen {
    ) {
       if (this.categories.isEmpty()) {
          Module killAura = new Module("KillAura");
-         killAura.addSetting(ModuleSetting.slider("Range", 4.0F, 2.0F, 6.0F, 0.1F));
+         killAura.addSetting(ModuleSetting.slider("Range", 2.9F, 2.5F, 3.05F, 0.05F));
+         killAura.addSetting(ModuleSetting.slider("Aim Speed", 55.0F, 20.0F, 100.0F, 5.0F));
+         killAura.addSetting(ModuleSetting.slider("Min APS", 5.0F, 1.0F, 15.0F, 0.5F));
+         killAura.addSetting(ModuleSetting.slider("Max APS", 8.0F, 1.0F, 18.0F, 0.5F));
+         killAura.addSetting(ModuleSetting.slider("FOV", 120.0F, 30.0F, 180.0F, 10.0F));
+         killAura.addSetting(ModuleSetting.slider("Reaction ms", 180.0F, 50.0F, 350.0F, 10.0F));
+         killAura.addSetting(ModuleSetting.slider("GCD Sens", 0.5F, 0.0F, 1.0F, 0.01F));
+         killAura.addSetting(ModuleSetting.choice("Target Mode", new String[]{"Distance", "Health", "Angle"}, 0));
+         killAura.addSetting(ModuleSetting.choice("Rotation", new String[]{"Polar", "Linear", "Bezier", "Cinematic"}, 0));
+         killAura.addSetting(ModuleSetting.toggle("Silent Aim", false));
+         killAura.addSetting(ModuleSetting.toggle("GCD Fix", true));
+         killAura.addSetting(ModuleSetting.toggle("Smart Aim", true));
+         killAura.addSetting(ModuleSetting.toggle("LoS Check", true));
+         killAura.addSetting(ModuleSetting.toggle("Move Aware", true));
          killAura.addSetting(ModuleSetting.toggle("Only Crit", false));
          killAura.addSetting(ModuleSetting.toggle("Attack Mobs", true));
-         killAura.addSetting(ModuleSetting.toggle("Attack Players", false));
+         killAura.addSetting(ModuleSetting.toggle("Attack Players", true));
          Module aimAssist = new Module("AimAssist");
          aimAssist.addSetting(ModuleSetting.slider("Speed", 50.0F, 10.0F, 100.0F, 5.0F));
          aimAssist.addSetting(ModuleSetting.slider("FOV", 90.0F, 30.0F, 180.0F, 10.0F));
