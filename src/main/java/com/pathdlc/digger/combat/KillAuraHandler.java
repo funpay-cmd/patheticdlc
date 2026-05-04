@@ -16,6 +16,7 @@ import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
@@ -112,6 +113,13 @@ public final class KillAuraHandler {
     private static float accelYawVelocity;
     private static float accelPitchVelocity;
 
+    // --- Augustus: Heuristics (target movement prediction) ---
+    private static double lastTargetX, lastTargetY, lastTargetZ;
+    private static boolean heuristicsInitialized;
+
+    // --- Augustus: AdvancedRots sinusoidal pitch state ---
+    private static double advancedRotAngle;
+
     public static void tick(MinecraftClient client) {
         if (!ModuleManager.isEnabled("KillAura")) {
             reset();
@@ -154,6 +162,7 @@ public final class KillAuraHandler {
 
         // --- Silent Aim toggle ---
         RotationHandler.setActive(silentAim);
+        RotationHandler.clearMovementCorrection();
 
         // --- Polar: VL decay cooldown — stop attacking to let VL drop ---
         if (vlDecayCooldown > 0) {
@@ -161,20 +170,10 @@ public final class KillAuraHandler {
             return;
         }
 
-        // --- Fatigue micro-pause (Polar: slightly higher chance for naturalness) ---
+        // --- Fatigue micro-pause (rare, natural break) ---
         if (pauseTicks > 0) { pauseTicks--; return; }
-        if (rng().nextFloat() < 0.005F) {
-            pauseTicks = randInt(3, 10);
-            return;
-        }
-
-        // --- Polar: Rotation short stop ---
-        if (shortStopTicks > 0) {
-            shortStopTicks--;
-            return;
-        }
-        if (rng().nextFloat() < 0.03F) {
-            shortStopTicks = randInt(1, 2);
+        if (rng().nextFloat() < 0.003F) {
+            pauseTicks = randInt(2, 5);
             return;
         }
 
@@ -231,12 +230,17 @@ public final class KillAuraHandler {
             reactionDelayActive = false;
         }
 
-        // --- Polar: Update Gaussian aim point offset (slow-moving within hitbox) ---
-        tickGaussianAimOffset();
+        // --- Compute rotation to target hitbox (BestHitVec + Heuristics, like Augustus) ---
+        float[] cleanAngles = getBestHitVecAngles(player, currentTarget);
 
-        // --- Compute rotation to target hitbox with Gaussian offset ---
-        // Polar bypass: aim point varies within hitbox, not always center
-        float[] cleanAngles = getGaussianTargetAngles(player, currentTarget);
+        // --- StopOnTarget: if crosshairTarget already hits our target, skip rotation ---
+        boolean alreadyOnTarget = false;
+        if (client.crosshairTarget != null
+                && client.crosshairTarget.getType() == HitResult.Type.ENTITY
+                && client.crosshairTarget instanceof EntityHitResult ehr
+                && ehr.getEntity() == currentTarget) {
+            alreadyOnTarget = true;
+        }
 
         if (silentAim) {
             // === SILENT AIM MODE ===
@@ -274,9 +278,12 @@ public final class KillAuraHandler {
             // Server sees what the player sees
             float newYaw, newPitch;
 
-            if (humanAim) {
+            // StopOnTarget: if already aiming at target, don't rotate further
+            if (alreadyOnTarget) {
+                newYaw = player.getYaw();
+                newPitch = player.getPitch();
+            } else if (humanAim) {
                 if ("Polar".equals(rotProfile)) {
-                    // Polar bypass: acceleration-based with error terms
                     float[] accelResult = tickAccelerationRotation(player, cleanAngles, aimSpeed);
                     newYaw = accelResult[0];
                     newPitch = accelResult[1];
@@ -293,33 +300,6 @@ public final class KillAuraHandler {
                     newYaw = smoothed[0];
                     newPitch = smoothed[1];
                 }
-
-                // Add humanization noise ONLY to visual rotation
-                // Intentional miss
-                if (missTicksRemaining > 0) {
-                    newYaw += missOffsetYaw;
-                    newPitch += missOffsetPitch;
-                    missTicksRemaining--;
-                } else if (rng().nextFloat() < 0.008F) {
-                    missTicksRemaining = randInt(3, 8);
-                    missOffsetYaw = randFloat(-2.0F, 2.0F);
-                    missOffsetPitch = randFloat(-1.5F, 1.5F);
-                }
-
-                // Micro-jitter
-                newYaw += randFloat(-0.3F, 0.3F);
-                newPitch += randFloat(-0.15F, 0.15F);
-
-                // Drift
-                tickDrift();
-                newYaw += driftYaw;
-                newPitch += driftPitch;
-
-                // Intave-style micro-tremor (0.03-0.08° at 2-5 Hz)
-                long ms = System.currentTimeMillis();
-                float tremorAmp = 0.04F + (float)(Math.sin(ms * 0.001) * 0.02);
-                newYaw += (float)(Math.sin(ms * 0.015) * tremorAmp);
-                newPitch += (float)(Math.sin(ms * 0.012) * tremorAmp * 0.6);
             } else {
                 newYaw = cleanAngles[0] + randFloat(-0.5F, 0.5F);
                 newPitch = cleanAngles[1] + randFloat(-0.3F, 0.3F);
@@ -334,12 +314,23 @@ public final class KillAuraHandler {
             float prevPitch = RotationHandler.getServerPitch();
             float deltaYaw = MathHelper.wrapDegrees(newYaw - prevYaw);
             float deltaPitch = newPitch - prevPitch;
-            float maxYawPerTick = 20.0F + randFloat(-3.0F, 3.0F);
-            float maxPitchPerTick = 15.0F + randFloat(-2.0F, 2.0F);
+            float maxYawPerTick = 55.0F + randFloat(-5.0F, 5.0F);
+            float maxPitchPerTick = 40.0F + randFloat(-4.0F, 4.0F);
             deltaYaw = MathHelper.clamp(deltaYaw, -maxYawPerTick, maxYawPerTick);
             deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
             newYaw = prevYaw + deltaYaw;
             newPitch = MathHelper.clamp(prevPitch + deltaPitch, -90.0F, 90.0F);
+
+            // AdvancedRots: sinusoidal pitch overshoot (Augustus technique)
+            // When rotation is far from target, add a sine wave to pitch that creates
+            // natural overshoot patterns, like a real hand overcorrecting.
+            if (humanAim && !alreadyOnTarget) {
+                float directYaw = cleanAngles[0];
+                float remainingYaw = MathHelper.wrapDegrees(directYaw - newYaw);
+                // Scale: stronger effect when further from target
+                double sinComponent = Math.sin(0.07 * remainingYaw) * 3.0;
+                newPitch = MathHelper.clamp(newPitch + (float) sinComponent, -90.0F, 90.0F);
+            }
 
             // Sync smooth state after clamping (fix divergence bug)
             smoothYaw = newYaw;
@@ -350,8 +341,10 @@ public final class KillAuraHandler {
                 RotationHandler.applyGCDToServerRotation();
             }
 
-            // Apply to player camera (non-silent mode)
+            // Apply to player camera (non-silent mode) with movement correction
+            float originalYaw = player.getYaw();
             RotationHandler.applyToPlayer(player);
+            RotationHandler.setMovementCorrection(originalYaw, RotationHandler.getServerYaw());
             RotationHandler.commitServerRotation();
 
             if (moveAware) {
@@ -359,16 +352,15 @@ public final class KillAuraHandler {
             }
         }
 
-        // --- Post-rotation delay: don't attack right after a big rotation ---
-        // Polar flags attacks that happen immediately after rotation snap
+        // --- Post-rotation delay: don't attack right after a very large rotation ---
         {
             float srvYaw = RotationHandler.getServerYaw();
             float srvPitch = RotationHandler.getServerPitch();
-            float[] desired = getGaussianTargetAngles(player, currentTarget);
+            float[] desired = getBestHitVecAngles(player, currentTarget);
             float aimDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - srvYaw))
                     + Math.abs(desired[1] - srvPitch);
-            if (aimDiff > 5.0F) {
-                postRotationDelay = randInt(2, 4);
+            if (aimDiff > 15.0F) {
+                postRotationDelay = randInt(1, 2);
             }
         }
         if (postRotationDelay > 0) {
@@ -448,8 +440,20 @@ public final class KillAuraHandler {
         float attackRange = range - randFloat(0.0F, 0.05F);
         if (hitboxDist > attackRange) return false;
 
-        // Raycast verification: does the server rotation actually point at the target?
-        if (!serverRotationHitsTarget(player, target, range + 3.0)) return false;
+        // Hit verification: does crosshairTarget point at an entity? (Like Augustus's perfectHit)
+        // In non-silent mode the camera is aimed at the target, so Minecraft's own raycast
+        // (crosshairTarget) should point at the entity. This is the most reliable check.
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.crosshairTarget != null && mc.crosshairTarget.getType() == HitResult.Type.ENTITY) {
+            // Minecraft's own raycast confirms entity — allow attack
+        } else if (!silentAim) {
+            // Non-silent: camera should be pointing at target. If crosshairTarget misses,
+            // fall back to our raycast with generous hitbox
+            if (!serverRotationHitsTarget(player, target, range + 1.0)) return false;
+        } else {
+            // Silent: use our server rotation raycast
+            if (!serverRotationHitsTarget(player, target, range + 1.0)) return false;
+        }
 
         // Crit-only check
         if (critOnly) {
@@ -461,10 +465,10 @@ public final class KillAuraHandler {
 
         // Non-silent: check aim readiness (player must visually face the target)
         if (!silentAim) {
-            float[] desired = getCleanTargetAngles(player, target);
+            float[] desired = getBestHitVecAngles(player, target);
             float yawDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - player.getYaw()));
             float pitchDiff = Math.abs(desired[1] - player.getPitch());
-            if (yawDiff > 4.0F || pitchDiff > 4.0F) return false;
+            if (yawDiff > 12.0F || pitchDiff > 12.0F) return false;
         }
 
         return true;
@@ -493,8 +497,8 @@ public final class KillAuraHandler {
 
         Vec3d endPos = eyePos.add(lookVec.x * maxDist, lookVec.y * maxDist, lookVec.z * maxDist);
 
-        // Expand hitbox slightly (Grim adds a threshold of ~0.0005 + movement threshold)
-        Box hitbox = target.getBoundingBox().expand(0.1);
+        // Expand hitbox (Grim uses ~0.1; for non-silent with rotation smoothing we need more tolerance)
+        Box hitbox = target.getBoundingBox().expand(0.15);
 
         return rayIntersectsBox(eyePos, endPos, hitbox);
     }
@@ -951,18 +955,43 @@ public final class KillAuraHandler {
     // ==================== ANGLE COMPUTATION ====================
 
     /**
-     * Compute CLEAN rotation angles pointing at the center of the target's hitbox.
-     * No noise, no randomization — this is what the server must see.
-     * Aims at the center of the bounding box for maximum raycast tolerance.
+     * BestHitVec with Heuristics: compute rotation angles to the CLOSEST point
+     * of the target's PREDICTED hitbox. Combines Augustus's getBestHitVec
+     * (clamp eye to bounding box) with heuristics (movement prediction).
+     *
+     * If target is moving, the aim point is shifted forward by their velocity
+     * so the rotation leads the target slightly — like a real player would.
      */
-    private static float[] getCleanTargetAngles(ClientPlayerEntity player, LivingEntity target) {
+    private static float[] getBestHitVecAngles(ClientPlayerEntity player, LivingEntity target) {
         Vec3d eyePos = player.getEyePos();
         Box box = target.getBoundingBox();
 
-        // Aim at center of bounding box — maximum distance from all edges
-        double targetX = (box.minX + box.maxX) / 2.0;
-        double targetY = (box.minY + box.maxY) / 2.0;
-        double targetZ = (box.minZ + box.maxZ) / 2.0;
+        // Heuristics: predict target movement
+        double predX = 0, predY = 0, predZ = 0;
+        if (heuristicsInitialized) {
+            double velX = target.getX() - lastTargetX;
+            double velY = target.getY() - lastTargetY;
+            double velZ = target.getZ() - lastTargetZ;
+            // Only predict if target is actually moving (avoid jitter on stationary targets)
+            if (Math.abs(velX) > 0.01 || Math.abs(velZ) > 0.01) {
+                // Predict ~2 ticks ahead, clamped to stay within reasonable range
+                predX = MathHelper.clamp(velX * 2.0, -0.5, 0.5);
+                predY = MathHelper.clamp(velY * 1.5, -0.3, 0.3);
+                predZ = MathHelper.clamp(velZ * 2.0, -0.5, 0.5);
+            }
+        }
+        lastTargetX = target.getX();
+        lastTargetY = target.getY();
+        lastTargetZ = target.getZ();
+        heuristicsInitialized = true;
+
+        // Shift bounding box by predicted movement
+        Box predBox = box.offset(predX, predY, predZ);
+
+        // Clamp eye position to predicted bounding box — closest point
+        double targetX = MathHelper.clamp(eyePos.x, predBox.minX, predBox.maxX);
+        double targetY = MathHelper.clamp(eyePos.y, predBox.minY, predBox.maxY);
+        double targetZ = MathHelper.clamp(eyePos.z, predBox.minZ, predBox.maxZ);
 
         double dx = targetX - eyePos.x;
         double dy = targetY - eyePos.y;
@@ -1053,7 +1082,11 @@ public final class KillAuraHandler {
         postRotationDelay = 0;
         accelYawVelocity = 0.0F;
         accelPitchVelocity = 0.0F;
+        // Augustus features
+        heuristicsInitialized = false;
+        advancedRotAngle = 0.0;
         RotationHandler.setActive(false);
+        RotationHandler.clearMovementCorrection();
     }
 
     public static LivingEntity getCurrentTarget() {

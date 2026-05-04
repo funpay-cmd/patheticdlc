@@ -30,6 +30,10 @@ public final class RotationHandler {
     private static float visualHeadYaw;
     private static float visualBodyYaw;
 
+    // Movement correction state (for non-silent mode)
+    private static float movementCorrectionDiff = 0.0F;
+    private static boolean movementCorrectionActive = false;
+
     // GCD state
     private static float gcdValue = 0.0F;
 
@@ -93,13 +97,15 @@ public final class RotationHandler {
     }
 
     /**
-     * Compute GCD from a fake sensitivity value.
-     * f = sensitivity * 0.6 + 0.2
-     * gcd = f^3 * 1.2
+     * Compute GCD factor from a fake sensitivity value.
+     * Uses the exact Minecraft mouse sensitivity formula (same as Augustus):
+     *   f1 = sensitivity * 0.6 + 0.2
+     *   f2 = f1^3 * 8.0
+     * The factor f2 is used to convert between angle deltas and mouse deltas.
      */
     public static void updateGCD(float sensitivity) {
         float f = sensitivity * 0.6F + 0.2F;
-        gcdValue = f * f * f * 1.2F;
+        gcdValue = f * f * f * 8.0F;
     }
 
     public static void clearGCD() {
@@ -111,29 +117,23 @@ public final class RotationHandler {
     }
 
     /**
-     * Apply GCD rounding to a rotation delta so it appears
-     * as if it came from real mouse input with the fake sensitivity.
-     */
-    public static float applyGCD(float delta) {
-        if (gcdValue <= 0.0F) return delta;
-        return Math.round(delta / gcdValue) * gcdValue;
-    }
-
-    /**
-     * Apply GCD to the server yaw/pitch deltas relative to previous values.
-     * Must be called after setServerRotation() each tick.
+     * Apply mouse sensitivity GCD to a rotation, converting angle delta to
+     * mouse delta (int) and back. Exact Minecraft formula (same as Augustus):
+     *   deltaX = (int)((6.667 * yaw - 6.667 * lastYaw) / f2)
+     *   yaw = lastYaw + deltaX * f2 * 0.15
      */
     public static void applyGCDToServerRotation() {
         if (gcdValue <= 0.0F) return;
 
-        float deltaYaw = MathHelper.wrapDegrees(serverYaw - prevServerYaw);
-        float deltaPitch = serverPitch - prevServerPitch;
+        // Yaw: convert to mouse delta and back
+        int deltaX = (int) ((6.667 * serverYaw - 6.667 * prevServerYaw) / gcdValue);
+        float f5 = (float) deltaX * gcdValue;
+        serverYaw = (float) ((double) prevServerYaw + (double) f5 * 0.15);
 
-        float gcdYaw = applyGCD(deltaYaw);
-        float gcdPitch = applyGCD(deltaPitch);
-
-        serverYaw = prevServerYaw + gcdYaw;
-        serverPitch = MathHelper.clamp(prevServerPitch + gcdPitch, -90.0F, 90.0F);
+        // Pitch: convert to mouse delta and back (inverted Y axis)
+        int deltaY = (int) ((6.667 * serverPitch - 6.667 * prevServerPitch) / gcdValue) * -1;
+        float f3 = (float) deltaY * gcdValue;
+        serverPitch = MathHelper.clamp((float) ((double) prevServerPitch - (double) f3 * 0.15), -90.0F, 90.0F);
     }
 
     /**
@@ -187,8 +187,35 @@ public final class RotationHandler {
      * so the camera actually follows the aim.
      */
     public static void applyToPlayer(ClientPlayerEntity player) {
+        player.prevYaw = player.getYaw();
+        player.prevPitch = player.getPitch();
         player.setYaw(serverYaw);
         player.setPitch(serverPitch);
+    }
+
+    // --- Movement correction ---
+
+    /**
+     * Set movement correction: the yaw difference between aim direction and
+     * the player's original look direction. The MovementFixMixin uses this
+     * to transform travel() input so WASD still moves in the intended direction.
+     */
+    public static void setMovementCorrection(float originalYaw, float aimYaw) {
+        movementCorrectionDiff = MathHelper.wrapDegrees(aimYaw - originalYaw);
+        movementCorrectionActive = Math.abs(movementCorrectionDiff) > 0.01F;
+    }
+
+    public static void clearMovementCorrection() {
+        movementCorrectionActive = false;
+        movementCorrectionDiff = 0.0F;
+    }
+
+    public static boolean isMovementCorrectionActive() {
+        return movementCorrectionActive;
+    }
+
+    public static float getMovementCorrectionDiff() {
+        return movementCorrectionDiff;
     }
 
     private RotationHandler() {
