@@ -161,20 +161,10 @@ public final class KillAuraHandler {
             return;
         }
 
-        // --- Fatigue micro-pause (Polar: slightly higher chance for naturalness) ---
+        // --- Fatigue micro-pause (rare, natural break) ---
         if (pauseTicks > 0) { pauseTicks--; return; }
-        if (rng().nextFloat() < 0.005F) {
-            pauseTicks = randInt(3, 10);
-            return;
-        }
-
-        // --- Polar: Rotation short stop ---
-        if (shortStopTicks > 0) {
-            shortStopTicks--;
-            return;
-        }
-        if (rng().nextFloat() < 0.03F) {
-            shortStopTicks = randInt(1, 2);
+        if (rng().nextFloat() < 0.003F) {
+            pauseTicks = randInt(2, 5);
             return;
         }
 
@@ -294,32 +284,9 @@ public final class KillAuraHandler {
                     newPitch = smoothed[1];
                 }
 
-                // Add humanization noise ONLY to visual rotation
-                // Intentional miss
-                if (missTicksRemaining > 0) {
-                    newYaw += missOffsetYaw;
-                    newPitch += missOffsetPitch;
-                    missTicksRemaining--;
-                } else if (rng().nextFloat() < 0.008F) {
-                    missTicksRemaining = randInt(3, 8);
-                    missOffsetYaw = randFloat(-2.0F, 2.0F);
-                    missOffsetPitch = randFloat(-1.5F, 1.5F);
-                }
-
-                // Micro-jitter
-                newYaw += randFloat(-0.3F, 0.3F);
-                newPitch += randFloat(-0.15F, 0.15F);
-
-                // Drift
-                tickDrift();
-                newYaw += driftYaw;
-                newPitch += driftPitch;
-
-                // Intave-style micro-tremor (0.03-0.08° at 2-5 Hz)
-                long ms = System.currentTimeMillis();
-                float tremorAmp = 0.04F + (float)(Math.sin(ms * 0.001) * 0.02);
-                newYaw += (float)(Math.sin(ms * 0.015) * tremorAmp);
-                newPitch += (float)(Math.sin(ms * 0.012) * tremorAmp * 0.6);
+                // No additive noise in non-silent mode — the rotation algorithm
+                // itself (acceleration/bezier curves) provides natural movement.
+                // Adding jitter/drift/tremor causes camera shaking and makes raycast miss.
             } else {
                 newYaw = cleanAngles[0] + randFloat(-0.5F, 0.5F);
                 newPitch = cleanAngles[1] + randFloat(-0.3F, 0.3F);
@@ -334,8 +301,8 @@ public final class KillAuraHandler {
             float prevPitch = RotationHandler.getServerPitch();
             float deltaYaw = MathHelper.wrapDegrees(newYaw - prevYaw);
             float deltaPitch = newPitch - prevPitch;
-            float maxYawPerTick = 20.0F + randFloat(-3.0F, 3.0F);
-            float maxPitchPerTick = 15.0F + randFloat(-2.0F, 2.0F);
+            float maxYawPerTick = 45.0F + randFloat(-5.0F, 5.0F);
+            float maxPitchPerTick = 35.0F + randFloat(-3.0F, 3.0F);
             deltaYaw = MathHelper.clamp(deltaYaw, -maxYawPerTick, maxYawPerTick);
             deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
             newYaw = prevYaw + deltaYaw;
@@ -359,16 +326,15 @@ public final class KillAuraHandler {
             }
         }
 
-        // --- Post-rotation delay: don't attack right after a big rotation ---
-        // Polar flags attacks that happen immediately after rotation snap
+        // --- Post-rotation delay: don't attack right after a very large rotation ---
         {
             float srvYaw = RotationHandler.getServerYaw();
             float srvPitch = RotationHandler.getServerPitch();
             float[] desired = getGaussianTargetAngles(player, currentTarget);
             float aimDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - srvYaw))
                     + Math.abs(desired[1] - srvPitch);
-            if (aimDiff > 5.0F) {
-                postRotationDelay = randInt(2, 4);
+            if (aimDiff > 15.0F) {
+                postRotationDelay = randInt(1, 2);
             }
         }
         if (postRotationDelay > 0) {
@@ -493,8 +459,8 @@ public final class KillAuraHandler {
 
         Vec3d endPos = eyePos.add(lookVec.x * maxDist, lookVec.y * maxDist, lookVec.z * maxDist);
 
-        // Expand hitbox slightly (Grim adds a threshold of ~0.0005 + movement threshold)
-        Box hitbox = target.getBoundingBox().expand(0.1);
+        // Expand hitbox (Grim uses ~0.1; for non-silent with rotation smoothing we need more tolerance)
+        Box hitbox = target.getBoundingBox().expand(0.15);
 
         return rayIntersectsBox(eyePos, endPos, hitbox);
     }
