@@ -113,6 +113,13 @@ public final class KillAuraHandler {
     private static float accelYawVelocity;
     private static float accelPitchVelocity;
 
+    // --- Augustus: Heuristics (target movement prediction) ---
+    private static double lastTargetX, lastTargetY, lastTargetZ;
+    private static boolean heuristicsInitialized;
+
+    // --- Augustus: AdvancedRots sinusoidal pitch state ---
+    private static double advancedRotAngle;
+
     public static void tick(MinecraftClient client) {
         if (!ModuleManager.isEnabled("KillAura")) {
             reset();
@@ -223,8 +230,17 @@ public final class KillAuraHandler {
             reactionDelayActive = false;
         }
 
-        // --- Compute rotation to target hitbox (BestHitVec — closest point, like Augustus) ---
+        // --- Compute rotation to target hitbox (BestHitVec + Heuristics, like Augustus) ---
         float[] cleanAngles = getBestHitVecAngles(player, currentTarget);
+
+        // --- StopOnTarget: if crosshairTarget already hits our target, skip rotation ---
+        boolean alreadyOnTarget = false;
+        if (client.crosshairTarget != null
+                && client.crosshairTarget.getType() == HitResult.Type.ENTITY
+                && client.crosshairTarget instanceof EntityHitResult ehr
+                && ehr.getEntity() == currentTarget) {
+            alreadyOnTarget = true;
+        }
 
         if (silentAim) {
             // === SILENT AIM MODE ===
@@ -262,9 +278,12 @@ public final class KillAuraHandler {
             // Server sees what the player sees
             float newYaw, newPitch;
 
-            if (humanAim) {
+            // StopOnTarget: if already aiming at target, don't rotate further
+            if (alreadyOnTarget) {
+                newYaw = player.getYaw();
+                newPitch = player.getPitch();
+            } else if (humanAim) {
                 if ("Polar".equals(rotProfile)) {
-                    // Polar bypass: acceleration-based with error terms
                     float[] accelResult = tickAccelerationRotation(player, cleanAngles, aimSpeed);
                     newYaw = accelResult[0];
                     newPitch = accelResult[1];
@@ -281,10 +300,6 @@ public final class KillAuraHandler {
                     newYaw = smoothed[0];
                     newPitch = smoothed[1];
                 }
-
-                // No additive noise in non-silent mode — the rotation algorithm
-                // itself (acceleration/bezier curves) provides natural movement.
-                // Adding jitter/drift/tremor causes camera shaking and makes raycast miss.
             } else {
                 newYaw = cleanAngles[0] + randFloat(-0.5F, 0.5F);
                 newPitch = cleanAngles[1] + randFloat(-0.3F, 0.3F);
@@ -305,6 +320,17 @@ public final class KillAuraHandler {
             deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
             newYaw = prevYaw + deltaYaw;
             newPitch = MathHelper.clamp(prevPitch + deltaPitch, -90.0F, 90.0F);
+
+            // AdvancedRots: sinusoidal pitch overshoot (Augustus technique)
+            // When rotation is far from target, add a sine wave to pitch that creates
+            // natural overshoot patterns, like a real hand overcorrecting.
+            if (humanAim && !alreadyOnTarget) {
+                float directYaw = cleanAngles[0];
+                float remainingYaw = MathHelper.wrapDegrees(directYaw - newYaw);
+                // Scale: stronger effect when further from target
+                double sinComponent = Math.sin(0.07 * remainingYaw) * 3.0;
+                newPitch = MathHelper.clamp(newPitch + (float) sinComponent, -90.0F, 90.0F);
+            }
 
             // Sync smooth state after clamping (fix divergence bug)
             smoothYaw = newYaw;
@@ -929,19 +955,43 @@ public final class KillAuraHandler {
     // ==================== ANGLE COMPUTATION ====================
 
     /**
-     * BestHitVec: compute rotation angles to the CLOSEST point of the target's
-     * hitbox to the player's eyes. This is the exact same approach Augustus uses.
-     * Clamps the eye position to the entity's bounding box — guaranteed to be
-     * within the hitbox, giving the most natural aim point.
+     * BestHitVec with Heuristics: compute rotation angles to the CLOSEST point
+     * of the target's PREDICTED hitbox. Combines Augustus's getBestHitVec
+     * (clamp eye to bounding box) with heuristics (movement prediction).
+     *
+     * If target is moving, the aim point is shifted forward by their velocity
+     * so the rotation leads the target slightly — like a real player would.
      */
     private static float[] getBestHitVecAngles(ClientPlayerEntity player, LivingEntity target) {
         Vec3d eyePos = player.getEyePos();
         Box box = target.getBoundingBox();
 
-        // Clamp eye position to bounding box — closest point on hitbox
-        double targetX = MathHelper.clamp(eyePos.x, box.minX, box.maxX);
-        double targetY = MathHelper.clamp(eyePos.y, box.minY, box.maxY);
-        double targetZ = MathHelper.clamp(eyePos.z, box.minZ, box.maxZ);
+        // Heuristics: predict target movement
+        double predX = 0, predY = 0, predZ = 0;
+        if (heuristicsInitialized) {
+            double velX = target.getX() - lastTargetX;
+            double velY = target.getY() - lastTargetY;
+            double velZ = target.getZ() - lastTargetZ;
+            // Only predict if target is actually moving (avoid jitter on stationary targets)
+            if (Math.abs(velX) > 0.01 || Math.abs(velZ) > 0.01) {
+                // Predict ~2 ticks ahead, clamped to stay within reasonable range
+                predX = MathHelper.clamp(velX * 2.0, -0.5, 0.5);
+                predY = MathHelper.clamp(velY * 1.5, -0.3, 0.3);
+                predZ = MathHelper.clamp(velZ * 2.0, -0.5, 0.5);
+            }
+        }
+        lastTargetX = target.getX();
+        lastTargetY = target.getY();
+        lastTargetZ = target.getZ();
+        heuristicsInitialized = true;
+
+        // Shift bounding box by predicted movement
+        Box predBox = box.offset(predX, predY, predZ);
+
+        // Clamp eye position to predicted bounding box — closest point
+        double targetX = MathHelper.clamp(eyePos.x, predBox.minX, predBox.maxX);
+        double targetY = MathHelper.clamp(eyePos.y, predBox.minY, predBox.maxY);
+        double targetZ = MathHelper.clamp(eyePos.z, predBox.minZ, predBox.maxZ);
 
         double dx = targetX - eyePos.x;
         double dy = targetY - eyePos.y;
@@ -1032,6 +1082,9 @@ public final class KillAuraHandler {
         postRotationDelay = 0;
         accelYawVelocity = 0.0F;
         accelPitchVelocity = 0.0F;
+        // Augustus features
+        heuristicsInitialized = false;
+        advancedRotAngle = 0.0;
         RotationHandler.setActive(false);
         RotationHandler.clearMovementCorrection();
     }
