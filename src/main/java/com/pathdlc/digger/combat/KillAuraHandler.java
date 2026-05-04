@@ -46,6 +46,7 @@ public final class KillAuraHandler {
     // --- Reaction time ---
     private static long targetAcquiredMs;
     private static boolean reactionDelayActive;
+    private static float actualReactionTarget;
 
     // --- Smooth rotation state (for non-silent mode) ---
     private static float smoothYaw, smoothPitch;
@@ -208,6 +209,7 @@ public final class KillAuraHandler {
             if (prev != currentTarget) {
                 targetAcquiredMs = System.currentTimeMillis();
                 reactionDelayActive = true;
+                actualReactionTarget = reactionMs + randFloat(-30.0F, 30.0F);
                 preAimDone = false;
                 preAimTicks = randInt(1, 3);
                 smoothInitialized = false;
@@ -215,11 +217,10 @@ public final class KillAuraHandler {
             }
         }
 
-        // Reaction delay
+        // Reaction delay (fixed threshold, not re-randomized each tick)
         if (reactionDelayActive) {
-            float actualReaction = reactionMs + randFloat(-30.0F, 30.0F);
             long elapsed = System.currentTimeMillis() - targetAcquiredMs;
-            if (elapsed < (long) actualReaction) {
+            if (elapsed < (long) actualReactionTarget) {
                 return;
             }
             reactionDelayActive = false;
@@ -695,12 +696,14 @@ public final class KillAuraHandler {
 
             bezierStartYaw = startYaw;
             bezierStartPitch = startPitch;
-            bezierEndYaw = dest[0];
-            bezierEndPitch = dest[1];
 
-            // Randomized control points for natural curve
+            // Fix: use wrapped difference to keep all points in same yaw space
+            // This prevents interpolation artifacts at ±180° boundary
             float diffYaw = MathHelper.wrapDegrees(dest[0] - startYaw);
             float diffPitch = dest[1] - startPitch;
+
+            bezierEndYaw = startYaw + diffYaw;
+            bezierEndPitch = dest[1];
 
             bezierCtrl1Yaw = startYaw + diffYaw * (0.2F + randFloat(0.0F, 0.2F)) + randFloat(-2.0F, 2.0F);
             bezierCtrl1Pitch = startPitch + diffPitch * (0.2F + randFloat(0.0F, 0.2F)) + randFloat(-1.0F, 1.0F);
@@ -708,8 +711,9 @@ public final class KillAuraHandler {
             bezierCtrl2Pitch = startPitch + diffPitch * (0.6F + randFloat(0.0F, 0.2F)) + randFloat(-0.8F, 0.8F);
         }
 
-        // Update end target (target may have moved)
-        bezierEndYaw = dest[0];
+        // Update end target (target may have moved) — keep in same yaw space
+        float newDiffYaw = MathHelper.wrapDegrees(dest[0] - bezierStartYaw);
+        bezierEndYaw = bezierStartYaw + newDiffYaw;
         bezierEndPitch = dest[1];
 
         // Progress speed based on aim speed and remaining distance
