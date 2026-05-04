@@ -103,6 +103,10 @@ public final class KillAuraHandler {
     // --- Polar: Fight fatigue (CPS decay over time) ---
     private static int fightDurationTicks;
     private static int vlDecayCooldown;
+    private static int vlDecayInterval = 300;
+
+    // --- Post-rotation delay (Polar: don't attack right after big rotation) ---
+    private static int postRotationDelay;
 
     // --- Polar: Acceleration rotation state ---
     private static float accelYawVelocity;
@@ -123,10 +127,10 @@ public final class KillAuraHandler {
         if (mod == null) return;
 
         // --- Read settings ---
-        float range = getFloat(mod, "Range", 3.0F);
+        float range = getFloat(mod, "Range", 2.9F);
         float aimSpeed = getFloat(mod, "Aim Speed", 55.0F);
-        float minAps = getFloat(mod, "Min APS", 8.0F);
-        float maxAps = getFloat(mod, "Max APS", 12.0F);
+        float minAps = getFloat(mod, "Min APS", 5.0F);
+        float maxAps = getFloat(mod, "Max APS", 8.0F);
         float fov = getFloat(mod, "FOV", 120.0F);
         float reactionMs = getFloat(mod, "Reaction ms", 180.0F);
         float sensitivity = getFloat(mod, "GCD Sens", 0.5F);
@@ -185,6 +189,7 @@ public final class KillAuraHandler {
                 reactionDelayActive = false;
                 preAimDone = false;
                 bezierActive = false;
+                fightDurationTicks = 0;
             }
             RotationHandler.setActive(false);
             return;
@@ -354,6 +359,23 @@ public final class KillAuraHandler {
             }
         }
 
+        // --- Post-rotation delay: don't attack right after a big rotation ---
+        // Polar flags attacks that happen immediately after rotation snap
+        {
+            float srvYaw = RotationHandler.getServerYaw();
+            float srvPitch = RotationHandler.getServerPitch();
+            float[] desired = getGaussianTargetAngles(player, currentTarget);
+            float aimDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - srvYaw))
+                    + Math.abs(desired[1] - srvPitch);
+            if (aimDiff > 5.0F) {
+                postRotationDelay = randInt(2, 4);
+            }
+        }
+        if (postRotationDelay > 0) {
+            postRotationDelay--;
+            return;
+        }
+
         // --- Pre-aim: don't attack until pre-aim ticks have passed ---
         if (!preAimDone) {
             preAimTicks--;
@@ -367,25 +389,17 @@ public final class KillAuraHandler {
         ticksSinceAttack++;
         fightDurationTicks++;
 
-        // Polar: VL decay — every 200-400 ticks (10-20 sec), pause for 30-60 ticks
-        if (fightDurationTicks > 0 && fightDurationTicks % (200 + randInt(0, 200)) == 0) {
+        // Polar: VL decay — periodic pause (pre-computed interval)
+        if (fightDurationTicks > 0 && fightDurationTicks % vlDecayInterval == 0) {
             vlDecayCooldown = randInt(30, 60);
+            vlDecayInterval = randInt(200, 400);
             return;
         }
 
-        // Double-click with FULL safety checks
-        if (doubleClickQueued) {
-            doubleClickQueued = false;
-            if (canAttack(client, player, currentTarget, range, critOnly, silentAim)) {
-                doAttack(client, player);
-            }
-            return;
-        }
-
-        // Skip click simulation
+        // Skip click simulation (naturalness)
         if (skipNextClick) {
             skipNextClick = false;
-            if (rng().nextFloat() < 0.08F) skipNextClick = true;
+            if (rng().nextFloat() < 0.06F) skipNextClick = true;
             return;
         }
 
@@ -405,12 +419,8 @@ public final class KillAuraHandler {
         if (fightDurationTicks > 600) fatigueMultiplier = 0.7F;
         nextAttackDelay = computeGaussianDelay(minAps * fatigueMultiplier, maxAps * fatigueMultiplier);
 
-        // Double-click chance (lower for Polar safety)
+        // Skip click chance (naturalness — no double-clicks for Polar safety)
         if (rng().nextFloat() < 0.06F) {
-            doubleClickQueued = true;
-        }
-        // Skip click chance (slightly higher for naturalness)
-        if (rng().nextFloat() < 0.07F) {
             skipNextClick = true;
         }
 
@@ -454,7 +464,7 @@ public final class KillAuraHandler {
             float[] desired = getCleanTargetAngles(player, target);
             float yawDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - player.getYaw()));
             float pitchDiff = Math.abs(desired[1] - player.getPitch());
-            if (yawDiff > 8.0F || pitchDiff > 8.0F) return false;
+            if (yawDiff > 4.0F || pitchDiff > 4.0F) return false;
         }
 
         return true;
@@ -1039,6 +1049,8 @@ public final class KillAuraHandler {
         shortStopTicks = 0;
         fightDurationTicks = 0;
         vlDecayCooldown = 0;
+        vlDecayInterval = randInt(200, 400);
+        postRotationDelay = 0;
         accelYawVelocity = 0.0F;
         accelPitchVelocity = 0.0F;
         RotationHandler.setActive(false);
