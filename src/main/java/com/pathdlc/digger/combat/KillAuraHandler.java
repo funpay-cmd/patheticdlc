@@ -16,6 +16,7 @@ import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
@@ -222,12 +223,8 @@ public final class KillAuraHandler {
             reactionDelayActive = false;
         }
 
-        // --- Polar: Update Gaussian aim point offset (slow-moving within hitbox) ---
-        tickGaussianAimOffset();
-
-        // --- Compute rotation to target hitbox with Gaussian offset ---
-        // Polar bypass: aim point varies within hitbox, not always center
-        float[] cleanAngles = getGaussianTargetAngles(player, currentTarget);
+        // --- Compute rotation to target hitbox (BestHitVec — closest point, like Augustus) ---
+        float[] cleanAngles = getBestHitVecAngles(player, currentTarget);
 
         if (silentAim) {
             // === SILENT AIM MODE ===
@@ -302,8 +299,8 @@ public final class KillAuraHandler {
             float prevPitch = RotationHandler.getServerPitch();
             float deltaYaw = MathHelper.wrapDegrees(newYaw - prevYaw);
             float deltaPitch = newPitch - prevPitch;
-            float maxYawPerTick = 80.0F + randFloat(-8.0F, 8.0F);
-            float maxPitchPerTick = 60.0F + randFloat(-5.0F, 5.0F);
+            float maxYawPerTick = 55.0F + randFloat(-5.0F, 5.0F);
+            float maxPitchPerTick = 40.0F + randFloat(-4.0F, 4.0F);
             deltaYaw = MathHelper.clamp(deltaYaw, -maxYawPerTick, maxYawPerTick);
             deltaPitch = MathHelper.clamp(deltaPitch, -maxPitchPerTick, maxPitchPerTick);
             newYaw = prevYaw + deltaYaw;
@@ -333,7 +330,7 @@ public final class KillAuraHandler {
         {
             float srvYaw = RotationHandler.getServerYaw();
             float srvPitch = RotationHandler.getServerPitch();
-            float[] desired = getGaussianTargetAngles(player, currentTarget);
+            float[] desired = getBestHitVecAngles(player, currentTarget);
             float aimDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - srvYaw))
                     + Math.abs(desired[1] - srvPitch);
             if (aimDiff > 15.0F) {
@@ -417,8 +414,20 @@ public final class KillAuraHandler {
         float attackRange = range - randFloat(0.0F, 0.05F);
         if (hitboxDist > attackRange) return false;
 
-        // Raycast verification: does the server rotation actually point at the target?
-        if (!serverRotationHitsTarget(player, target, range + 3.0)) return false;
+        // Hit verification: does crosshairTarget point at an entity? (Like Augustus's perfectHit)
+        // In non-silent mode the camera is aimed at the target, so Minecraft's own raycast
+        // (crosshairTarget) should point at the entity. This is the most reliable check.
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.crosshairTarget != null && mc.crosshairTarget.getType() == HitResult.Type.ENTITY) {
+            // Minecraft's own raycast confirms entity — allow attack
+        } else if (!silentAim) {
+            // Non-silent: camera should be pointing at target. If crosshairTarget misses,
+            // fall back to our raycast with generous hitbox
+            if (!serverRotationHitsTarget(player, target, range + 1.0)) return false;
+        } else {
+            // Silent: use our server rotation raycast
+            if (!serverRotationHitsTarget(player, target, range + 1.0)) return false;
+        }
 
         // Crit-only check
         if (critOnly) {
@@ -430,10 +439,10 @@ public final class KillAuraHandler {
 
         // Non-silent: check aim readiness (player must visually face the target)
         if (!silentAim) {
-            float[] desired = getCleanTargetAngles(player, target);
+            float[] desired = getBestHitVecAngles(player, target);
             float yawDiff = Math.abs(MathHelper.wrapDegrees(desired[0] - player.getYaw()));
             float pitchDiff = Math.abs(desired[1] - player.getPitch());
-            if (yawDiff > 8.0F || pitchDiff > 8.0F) return false;
+            if (yawDiff > 12.0F || pitchDiff > 12.0F) return false;
         }
 
         return true;
@@ -920,18 +929,19 @@ public final class KillAuraHandler {
     // ==================== ANGLE COMPUTATION ====================
 
     /**
-     * Compute CLEAN rotation angles pointing at the center of the target's hitbox.
-     * No noise, no randomization — this is what the server must see.
-     * Aims at the center of the bounding box for maximum raycast tolerance.
+     * BestHitVec: compute rotation angles to the CLOSEST point of the target's
+     * hitbox to the player's eyes. This is the exact same approach Augustus uses.
+     * Clamps the eye position to the entity's bounding box — guaranteed to be
+     * within the hitbox, giving the most natural aim point.
      */
-    private static float[] getCleanTargetAngles(ClientPlayerEntity player, LivingEntity target) {
+    private static float[] getBestHitVecAngles(ClientPlayerEntity player, LivingEntity target) {
         Vec3d eyePos = player.getEyePos();
         Box box = target.getBoundingBox();
 
-        // Aim at center of bounding box — maximum distance from all edges
-        double targetX = (box.minX + box.maxX) / 2.0;
-        double targetY = (box.minY + box.maxY) / 2.0;
-        double targetZ = (box.minZ + box.maxZ) / 2.0;
+        // Clamp eye position to bounding box — closest point on hitbox
+        double targetX = MathHelper.clamp(eyePos.x, box.minX, box.maxX);
+        double targetY = MathHelper.clamp(eyePos.y, box.minY, box.maxY);
+        double targetZ = MathHelper.clamp(eyePos.z, box.minZ, box.maxZ);
 
         double dx = targetX - eyePos.x;
         double dy = targetY - eyePos.y;
