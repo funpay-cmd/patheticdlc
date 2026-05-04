@@ -52,6 +52,17 @@ public final class RotationHandler {
         }
         active = state;
         if (!state) {
+            // Seed server rotation from player so getServerYaw()/getServerPitch()
+            // return the player's current facing instead of stale 0.0F.
+            // This prevents the non-silent rotation speed limit from computing
+            // deltaYaw = wrapDegrees(newYaw - 0) on the first tick.
+            ClientPlayerEntity p = MinecraftClient.getInstance().player;
+            if (p != null) {
+                serverYaw = p.getYaw();
+                serverPitch = p.getPitch();
+                prevServerYaw = serverYaw;
+                prevServerPitch = serverPitch;
+            }
             initialized = false;
         }
     }

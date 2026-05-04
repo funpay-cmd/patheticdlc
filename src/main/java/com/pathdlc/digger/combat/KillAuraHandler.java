@@ -23,18 +23,17 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
 /**
- * KillAura with proper anti-cheat bypass.
+ * KillAura with anti-cheat bypass for Polar, Grim, Matrix, Vulcan, Intave.
  *
- * Key insight from Grim source analysis:
- * Grim traces a ray from (player.x, player.y+eyeHeight, player.z) along the
- * look direction derived from (player.yaw, player.pitch) in the movement packet.
- * If this ray does NOT intersect the target entity's bounding box within reach,
- * the attack is cancelled with a HITBOX flag.
+ * Polar-specific bypass techniques:
+ * 1. Gaussian aim point offset — aim point varies within hitbox using Gaussian distribution,
+ *    changing slowly over time. Defeats Polar's ML "always center" detection.
+ * 2. Rotation short stops — ~3% chance to freeze rotation for 1-2 ticks. Anti-pattern.
+ * 3. Acceleration-based rotation with error terms — mimics real mouse movement.
+ * 4. Attack timing fatigue — CPS decreases over longer fights, occasional pauses.
+ * 5. VL decay awareness — backs off aggression periodically to let VL decay.
  *
- * Therefore: the server rotation MUST point at the target's hitbox.
- * All humanization noise is applied to the VISUAL rotation only (when silent aim is ON).
- * When silent aim is OFF, noise is applied to the actual rotation (which IS the server rotation).
- *
+ * Grim-specific: server rotation points at hitbox, raycast verified before every attack.
  * Sprint reset packets removed — Grim's PacketOrder checks flag sprint toggle around attacks.
  */
 public final class KillAuraHandler {
@@ -90,6 +89,24 @@ public final class KillAuraHandler {
     // --- Micro-movement (anti-AFK) ---
     private static int microMoveTicks;
 
+    // --- Polar: Gaussian aim point offset ---
+    private static float gaussianOffsetYaw;
+    private static float gaussianOffsetPitch;
+    private static float gaussianTargetOffsetYaw;
+    private static float gaussianTargetOffsetPitch;
+    private static int gaussianChangeTicks;
+
+    // --- Polar: Rotation short stop ---
+    private static int shortStopTicks;
+
+    // --- Polar: Fight fatigue (CPS decay over time) ---
+    private static int fightDurationTicks;
+    private static int vlDecayCooldown;
+
+    // --- Polar: Acceleration rotation state ---
+    private static float accelYawVelocity;
+    private static float accelPitchVelocity;
+
     public static void tick(MinecraftClient client) {
         if (!ModuleManager.isEnabled("KillAura")) {
             reset();
@@ -133,10 +150,26 @@ public final class KillAuraHandler {
         // --- Silent Aim toggle ---
         RotationHandler.setActive(silentAim);
 
-        // --- Fatigue micro-pause ---
+        // --- Polar: VL decay cooldown — stop attacking to let VL drop ---
+        if (vlDecayCooldown > 0) {
+            vlDecayCooldown--;
+            return;
+        }
+
+        // --- Fatigue micro-pause (Polar: slightly higher chance for naturalness) ---
         if (pauseTicks > 0) { pauseTicks--; return; }
-        if (rng().nextFloat() < 0.003F) {
-            pauseTicks = randInt(2, 6);
+        if (rng().nextFloat() < 0.005F) {
+            pauseTicks = randInt(3, 10);
+            return;
+        }
+
+        // --- Polar: Rotation short stop ---
+        if (shortStopTicks > 0) {
+            shortStopTicks--;
+            return;
+        }
+        if (rng().nextFloat() < 0.03F) {
+            shortStopTicks = randInt(1, 2);
             return;
         }
 
@@ -192,25 +225,27 @@ public final class KillAuraHandler {
             reactionDelayActive = false;
         }
 
-        // --- Compute CLEAN rotation to target hitbox center ---
-        // This is the rotation the SERVER must see for Grim's raycast to hit
-        float[] cleanAngles = getCleanTargetAngles(player, currentTarget);
+        // --- Polar: Update Gaussian aim point offset (slow-moving within hitbox) ---
+        tickGaussianAimOffset();
+
+        // --- Compute rotation to target hitbox with Gaussian offset ---
+        // Polar bypass: aim point varies within hitbox, not always center
+        float[] cleanAngles = getGaussianTargetAngles(player, currentTarget);
 
         if (silentAim) {
             // === SILENT AIM MODE ===
-            // Server gets CLEAN rotation (only GCD applied, no noise)
+            // Server gets aim rotation with Gaussian offset (still within hitbox)
             // Player camera is unchanged
             float serverYaw = cleanAngles[0];
             float serverPitch = cleanAngles[1];
 
-            // Apply rotation speed limit for safety (Grim doesn't check this,
-            // but some ACs might flag instant 180° snaps)
+            // Polar-safe rotation speed limit (lower than Grim to avoid ML flagging)
             float prevYaw = RotationHandler.getServerYaw();
             float prevPitch = RotationHandler.getServerPitch();
             float deltaYaw = MathHelper.wrapDegrees(serverYaw - prevYaw);
             float deltaPitch = serverPitch - prevPitch;
-            float maxYaw = 45.0F + randFloat(-5.0F, 5.0F);
-            float maxPitch = 35.0F + randFloat(-3.0F, 3.0F);
+            float maxYaw = 30.0F + randFloat(-5.0F, 5.0F);
+            float maxPitch = 25.0F + randFloat(-3.0F, 3.0F);
             deltaYaw = MathHelper.clamp(deltaYaw, -maxYaw, maxYaw);
             deltaPitch = MathHelper.clamp(deltaPitch, -maxPitch, maxPitch);
             serverYaw = prevYaw + deltaYaw;
@@ -234,7 +269,12 @@ public final class KillAuraHandler {
             float newYaw, newPitch;
 
             if (humanAim) {
-                if ("Bezier".equals(rotProfile)) {
+                if ("Polar".equals(rotProfile)) {
+                    // Polar bypass: acceleration-based with error terms
+                    float[] accelResult = tickAccelerationRotation(player, cleanAngles, aimSpeed);
+                    newYaw = accelResult[0];
+                    newPitch = accelResult[1];
+                } else if ("Bezier".equals(rotProfile)) {
                     float[] bezResult = tickBezierRotation(player, cleanAngles, aimSpeed);
                     newYaw = bezResult[0];
                     newPitch = bezResult[1];
@@ -324,8 +364,15 @@ public final class KillAuraHandler {
 
         // --- Attack logic ---
         ticksSinceAttack++;
+        fightDurationTicks++;
 
-        // Double-click with FULL safety checks (fixes Devin Review bug)
+        // Polar: VL decay — every 200-400 ticks (10-20 sec), pause for 30-60 ticks
+        if (fightDurationTicks > 0 && fightDurationTicks % (200 + randInt(0, 200)) == 0) {
+            vlDecayCooldown = randInt(30, 60);
+            return;
+        }
+
+        // Double-click with FULL safety checks
         if (doubleClickQueued) {
             doubleClickQueued = false;
             if (canAttack(client, player, currentTarget, range, critOnly, silentAim)) {
@@ -349,14 +396,20 @@ public final class KillAuraHandler {
 
         doAttack(client, player);
         ticksSinceAttack = 0;
-        nextAttackDelay = computeGaussianDelay(minAps, maxAps);
 
-        // Double-click chance
-        if (rng().nextFloat() < 0.1F) {
+        // Polar: CPS decreases over fight duration (fatigue)
+        float fatigueMultiplier = 1.0F;
+        if (fightDurationTicks > 100) fatigueMultiplier = 0.9F;
+        if (fightDurationTicks > 300) fatigueMultiplier = 0.8F;
+        if (fightDurationTicks > 600) fatigueMultiplier = 0.7F;
+        nextAttackDelay = computeGaussianDelay(minAps * fatigueMultiplier, maxAps * fatigueMultiplier);
+
+        // Double-click chance (lower for Polar safety)
+        if (rng().nextFloat() < 0.06F) {
             doubleClickQueued = true;
         }
-        // Skip click chance
-        if (rng().nextFloat() < 0.05F) {
+        // Skip click chance (slightly higher for naturalness)
+        if (rng().nextFloat() < 0.07F) {
             skipNextClick = true;
         }
 
@@ -492,6 +545,140 @@ public final class KillAuraHandler {
         // Grim queues the attack and validates it when the movement packet arrives.
         client.interactionManager.attackEntity(player, currentTarget);
         player.swingHand(Hand.MAIN_HAND);
+    }
+
+    // ==================== POLAR: GAUSSIAN AIM OFFSET ====================
+
+    /**
+     * Slowly update the Gaussian aim offset. Instead of aiming at exact hitbox center
+     * every tick, the offset drifts within the hitbox using Gaussian distribution.
+     * This defeats Polar's ML that detects constant-center aiming.
+     */
+    private static void tickGaussianAimOffset() {
+        gaussianChangeTicks--;
+        if (gaussianChangeTicks <= 0) {
+            // New random offset target using Gaussian distribution
+            gaussianTargetOffsetYaw = (float)(rng().nextGaussian() * 0.25);
+            gaussianTargetOffsetPitch = (float)(rng().nextGaussian() * 0.15);
+            // Clamp to stay within hitbox
+            gaussianTargetOffsetYaw = MathHelper.clamp(gaussianTargetOffsetYaw, -0.5F, 0.5F);
+            gaussianTargetOffsetPitch = MathHelper.clamp(gaussianTargetOffsetPitch, -0.3F, 0.3F);
+            // Change speed — vary between fast and slow transitions
+            gaussianChangeTicks = randInt(15, 50);
+        }
+        // Smoothly interpolate toward target offset
+        float speed = 0.08F + randFloat(0.0F, 0.04F);
+        gaussianOffsetYaw += (gaussianTargetOffsetYaw - gaussianOffsetYaw) * speed;
+        gaussianOffsetPitch += (gaussianTargetOffsetPitch - gaussianOffsetPitch) * speed;
+    }
+
+    /**
+     * Compute rotation angles to a point within the target's hitbox
+     * that varies using the Gaussian offset. Still guaranteed to be
+     * within the hitbox (ray will still hit).
+     */
+    private static float[] getGaussianTargetAngles(ClientPlayerEntity player, LivingEntity target) {
+        Vec3d eyePos = player.getEyePos();
+        Box box = target.getBoundingBox();
+
+        double centerX = (box.minX + box.maxX) / 2.0;
+        double centerY = (box.minY + box.maxY) / 2.0;
+        double centerZ = (box.minZ + box.maxZ) / 2.0;
+
+        // Apply Gaussian offset within the hitbox (fraction of hitbox size)
+        double halfWidth = (box.maxX - box.minX) / 2.0;
+        double halfHeight = (box.maxY - box.minY) / 2.0;
+        double halfDepth = (box.maxZ - box.minZ) / 2.0;
+
+        // Offset is a fraction (-0.5 to 0.5) of the half-size, so total stays within box
+        double targetX = centerX + halfWidth * gaussianOffsetYaw * 0.6;
+        double targetY = centerY + halfHeight * gaussianOffsetPitch * 0.6;
+        double targetZ = centerZ + halfDepth * gaussianOffsetYaw * 0.4;
+
+        // Clamp to bounding box with a small margin
+        double margin = 0.02;
+        targetX = MathHelper.clamp(targetX, box.minX + margin, box.maxX - margin);
+        targetY = MathHelper.clamp(targetY, box.minY + margin, box.maxY - margin);
+        targetZ = MathHelper.clamp(targetZ, box.minZ + margin, box.maxZ - margin);
+
+        double dx = targetX - eyePos.x;
+        double dy = targetY - eyePos.y;
+        double dz = targetZ - eyePos.z;
+        double dist = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float pitch = (float) Math.toDegrees(-Math.atan2(dy, dist));
+        return new float[]{yaw, MathHelper.clamp(pitch, -90.0F, 90.0F)};
+    }
+
+    // ==================== POLAR: ACCELERATION ROTATION ====================
+
+    /**
+     * Acceleration-based rotation inspired by LiquidBounce's Acceleration mode.
+     * Uses acceleration/deceleration with error terms to mimic real mouse movement.
+     * Key for Polar bypass — Polar's ML detects linear and Bezier patterns over time.
+     */
+    private static float[] tickAccelerationRotation(ClientPlayerEntity player, float[] dest, float aimSpeed) {
+        float currentYaw, currentPitch;
+        if (smoothInitialized) {
+            currentYaw = smoothYaw;
+            currentPitch = smoothPitch;
+        } else {
+            currentYaw = player.getYaw();
+            currentPitch = player.getPitch();
+            smoothInitialized = true;
+            accelYawVelocity = 0.0F;
+            accelPitchVelocity = 0.0F;
+        }
+
+        float yawDiff = MathHelper.wrapDegrees(dest[0] - currentYaw);
+        float pitchDiff = dest[1] - currentPitch;
+
+        float speedMult = (aimSpeed / 100.0F);
+
+        // Acceleration parameters
+        float yawAccel = (20.0F + randFloat(0.0F, 5.0F)) * speedMult;
+        float pitchAccel = (20.0F + randFloat(0.0F, 5.0F)) * speedMult;
+
+        // Acceleration error (makes it non-deterministic)
+        float yawAccelError = (float)(rng().nextGaussian() * 0.1);
+        float pitchAccelError = (float)(rng().nextGaussian() * 0.1);
+
+        // Constant error (offset drift)
+        float yawConstError = (float)(rng().nextGaussian() * 0.08);
+        float pitchConstError = (float)(rng().nextGaussian() * 0.08);
+
+        // Compute target velocity
+        float targetYawVel = yawDiff * 0.15F * speedMult;
+        float targetPitchVel = pitchDiff * 0.12F * speedMult;
+
+        // Accelerate toward target velocity
+        float yawAccelStep = (targetYawVel - accelYawVelocity) / yawAccel;
+        float pitchAccelStep = (targetPitchVel - accelPitchVelocity) / pitchAccel;
+
+        accelYawVelocity += yawAccelStep * (1.0F + yawAccelError);
+        accelPitchVelocity += pitchAccelStep * (1.0F + pitchAccelError);
+
+        // Apply velocity limits
+        float maxVel = 15.0F * speedMult;
+        accelYawVelocity = MathHelper.clamp(accelYawVelocity, -maxVel, maxVel);
+        accelPitchVelocity = MathHelper.clamp(accelPitchVelocity, -maxVel * 0.7F, maxVel * 0.7F);
+
+        // Sigmoid deceleration when close to target
+        float yawAbsDiff = Math.abs(yawDiff);
+        float pitchAbsDiff = Math.abs(pitchDiff);
+        if (yawAbsDiff < 5.0F) {
+            float sigmoid = 1.0F / (1.0F + (float)Math.exp(-10.0F * (yawAbsDiff / 5.0F - 0.3F)));
+            accelYawVelocity *= sigmoid;
+        }
+        if (pitchAbsDiff < 3.0F) {
+            float sigmoid = 1.0F / (1.0F + (float)Math.exp(-10.0F * (pitchAbsDiff / 3.0F - 0.3F)));
+            accelPitchVelocity *= sigmoid;
+        }
+
+        smoothYaw = currentYaw + accelYawVelocity + yawConstError;
+        smoothPitch = MathHelper.clamp(currentPitch + accelPitchVelocity + pitchConstError, -90.0F, 90.0F);
+
+        return new float[]{smoothYaw, smoothPitch};
     }
 
     // ==================== BEZIER ROTATION ====================
@@ -839,6 +1026,17 @@ public final class KillAuraHandler {
         switchThreshold = 60;
         bezierActive = false;
         microMoveTicks = 0;
+        // Polar state
+        gaussianOffsetYaw = 0.0F;
+        gaussianOffsetPitch = 0.0F;
+        gaussianTargetOffsetYaw = 0.0F;
+        gaussianTargetOffsetPitch = 0.0F;
+        gaussianChangeTicks = 0;
+        shortStopTicks = 0;
+        fightDurationTicks = 0;
+        vlDecayCooldown = 0;
+        accelYawVelocity = 0.0F;
+        accelPitchVelocity = 0.0F;
         RotationHandler.setActive(false);
     }
 
